@@ -27,7 +27,7 @@ const response = await fetch('http://localhost:8888/pay', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
   body: JSON.stringify({
-    order_id: 'ORD-1234',
+    order_id: '#2600000001',
     amount_cents: 1500,
     currency: 'EUR',
     items: [
@@ -70,6 +70,7 @@ response = requests.post(
     "https://api.sumup.com/v0.1/checkouts",
     headers={"Authorization": f"Bearer {API_KEY}"},
     json={
+        "order_id": 2600000001,
         "amount": 1500,
         "currency": "EUR",
         "description": f"Order {order_id}",
