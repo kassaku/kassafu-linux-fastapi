@@ -1,12 +1,18 @@
-# kassafu
+# Business case
+The Python program will handle communication to the POS computer and to the SumUP server. It is located at the POS computer.
+<img width="2528" height="1696" alt="image" src="https://github.com/user-attachments/assets/4528b4fc-5068-4148-a87e-8f34c3d88c3e" />
+
+# Restaurant overview
 Payments for payment terminals like SumUp, interface to Angular website as a backend.
 KassaFu — The payment bridge between SumUp terminals and your restaurant system.
-
-So KassaFu means:
-    Kassa (Dutch) = cash register
-    Fu (付款) = payment
+<img width="2528" height="1696" alt="image" src="https://github.com/user-attachments/assets/25eae3c6-bcdf-481e-aab4-350d7b3b29da" />
 
 # Requirements
+
+## Project name
+KassaFu means:
+    Kassa (Dutch) = cash register
+    Fu (付款) = payment 
 
 ## R1 - Accept payment requests from Angular (on same PC)
 Detail	Specification
