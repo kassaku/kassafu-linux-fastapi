@@ -9,6 +9,6 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Copy environment file
-cp .env.example .env
+# cp .env.example .env
 # Edit .env with your SumUp sandbox credentials
 

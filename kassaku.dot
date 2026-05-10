@@ -1,0 +1,227 @@
+digraph KassaFuFlowchart {
+    // Graph settings
+    rankdir=TB;
+    splines=ortho;
+    nodesep=0.5;
+    ranksep=0.7;
+    fontname="Arial";
+    node [fontname="Arial", shape=box, style=filled];
+    edge [fontname="Arial", fontsize=10];
+    
+    // Define styles for different node types
+    node [shape=box, style=filled];
+    
+    subgraph cluster_legend {
+        label="Legend";
+        style=filled;
+        color=lightgrey;
+        node [style=filled, shape=plaintext];
+        
+        legend_start [label="● Start/End", fillcolor="#E8F4F8", shape=ellipse];
+        legend_process [label="■ Process", fillcolor="#FFF9E6"];
+        legend_decision [label="◇ Decision", fillcolor="#FFE5E5", shape=diamond];
+        legend_external [label="● External System", fillcolor="#E8F8E8", shape=ellipse];
+        legend_error [label="▲ Error Handler", fillcolor="#FFE5CC", shape=invtriangle];
+        legend_log [label="📄 Log Action", fillcolor="#F0F0F0"];
+        
+        legend_start -> legend_process -> legend_decision -> legend_external -> legend_error -> legend_log [style=invis];
+    }
+    
+    // ============ MAIN FLOW (Left side) ============
+    subgraph cluster_main {
+        label="KassaFu Main Flow";
+        style=filled;
+        fillcolor="#F9F9F9";
+        
+        start [label="Receive Payment Request\n(POST /pay or CLI)", fillcolor="#E8F4F8", shape=ellipse];
+        validate [label="Validate Request\n(order_id, amount, currency)", fillcolor="#FFF9E6"];
+        queue_check [label="Active Payment?", fillcolor="#FFE5E5", shape=diamond];
+        queue [label="Queue Request\n(FIFO)", fillcolor="#FFF9E6"];
+        process [label="Process Payment", fillcolor="#FFF9E6"];
+        
+        start -> validate;
+        validate -> queue_check;
+        queue_check -> process [label="No"];
+        queue_check -> queue [label="Yes"];
+        queue -> process [label="When queue reaches front"];
+    }
+    
+    // ============ PROVIDER COMPARISON (Side by side) ============
+    // SumUp Flow
+    subgraph cluster_sumup {
+        label="SumUp Provider (Current Implementation)";
+        style=filled;
+        fillcolor="#E8F4F8";
+        color="#2C3E50";
+        
+        sumup_auth [label="Bearer Token Auth", fillcolor="#FFF9E6"];
+        sumup_checkout [label="Create Checkout\nPOST /v0.1/checkouts", fillcolor="#FFF9E6"];
+        sumup_checkout_response [label="Get checkout_id", fillcolor="#FFF9E6"];
+        sumup_poll [label="Poll Status\n(every 2 seconds)", fillcolor="#FFF9E6"];
+        sumup_decision [label="Status?", fillcolor="#FFE5E5", shape=diamond];
+        sumup_success [label="Extract transaction_id", fillcolor="#E8F8E8"];
+        sumup_fail [label="Return Failed", fillcolor="#FFE5CC"];
+        sumup_timeout [label="Return Timeout\n(60s elapsed)", fillcolor="#FFE5CC"];
+        
+        sumup_auth -> sumup_checkout;
+        sumup_checkout -> sumup_checkout_response;
+        sumup_checkout_response -> sumup_poll;
+        sumup_poll -> sumup_decision;
+        sumup_decision -> sumup_success [label="paid/successful"];
+        sumup_decision -> sumup_fail [label="failed/cancelled"];
+        sumup_decision -> sumup_timeout [label="60 seconds passed"];
+    }
+    
+    // CCV Flow (Future)
+    subgraph cluster_ccv {
+        label="CCV Provider (Future Implementation)";
+        style=filled;
+        fillcolor="#F0F0F0";
+        color="#7F8C8D";
+        
+        ccv_auth [label="API Key Auth\n(merchant_id + api_key)", fillcolor="#FFF9E6"];
+        ccv_checkout [label="Create Payment Request\nPOST /v1/payments", fillcolor="#FFF9E6"];
+        ccv_format [label="Convert Amount Format\n(1500 cents → 15.00 dec)", fillcolor="#FFF9E6"];
+        ccv_response [label="Get payment_id + receipts", fillcolor="#FFF9E6"];
+        ccv_poll [label="Poll or Webhook?", fillcolor="#FFE5E5", shape=diamond];
+        ccv_poll_loop [label="Poll every 2s\nGET /v1/payments/{id}", fillcolor="#FFF9E6"];
+        ccv_webhook [label="Wait for webhook\n/payment/update", fillcolor="#FFF9E6"];
+        ccv_decision [label="Status?", fillcolor="#FFE5E5", shape=diamond];
+        ccv_success [label="Parse response\nReturn success", fillcolor="#E8F8E8"];
+        ccv_fail [label="Return Failed", fillcolor="#FFE5CC"];
+        
+        ccv_auth -> ccv_checkout;
+        ccv_checkout -> ccv_format;
+        ccv_format -> ccv_response;
+        ccv_response -> ccv_poll;
+        ccv_poll -> ccv_poll_loop [label="Polling mode"];
+        ccv_poll -> ccv_webhook [label="Async mode"];
+        ccv_poll_loop -> ccv_decision;
+        ccv_webhook -> ccv_decision;
+        ccv_decision -> ccv_success [label="SUCCESS"];
+        ccv_decision -> ccv_fail [label="FAILED/CANCELED"];
+    }
+    
+    // ============ RECEIPT HANDLING ============
+    subgraph cluster_receipt {
+        label="Receipt Handling";
+        style=filled;
+        fillcolor="#E8F8E8";
+        color="#27AE60";
+        
+        receipt_start [label="Payment Success\nProceed to receipt", shape=ellipse, fillcolor="#E8F4F8"];
+        receipt_check [label="print_receipt = true?", fillcolor="#FFE5E5", shape=diamond];
+        receipt_format [label="Format Receipt\n(ESC/POS + plain text)", fillcolor="#FFF9E6"];
+        receipt_sumup [label="Send to Solo's printer\n(via SumUp API)", fillcolor="#FFF9E6"];
+        receipt_ccv [label="Use receipt data from\npayment response", fillcolor="#FFF9E6"];
+        receipt_log [label="Log receipt printed", fillcolor="#F0F0F0"];
+        receipt_skip [label="Skip receipt printing", shape=ellipse, fillcolor="#E8F4F8"];
+        
+        receipt_start -> receipt_check;
+        receipt_check -> receipt_format [label="Yes"];
+        receipt_check -> receipt_skip [label="No"];
+        receipt_format -> receipt_sumup;
+        receipt_sumup -> receipt_log;
+    }
+    
+    // ============ WEBHOOK HANDLING ============
+    subgraph cluster_webhook {
+        label="Webhook Handler (Async Fallback)";
+        style=filled;
+        fillcolor="#FFF0F0";
+        color="#E74C3C";
+        
+        webhook_start [label="Receive POST /webhook", shape=ellipse, fillcolor="#E8F4F8"];
+        webhook_verify [label="Verify Signature\n(HMAC-SHA256)", fillcolor="#FFF9E6"];
+        webhook_valid [label="Signature valid?", fillcolor="#FFE5E5", shape=diamond];
+        webhook_reject [label="Reject: 401 Unauthorized", fillcolor="#FFE5CC"];
+        webhook_parse [label="Parse event type", fillcolor="#FFF9E6"];
+        webhook_success [label="event = payment.succeeded", fillcolor="#E8F8E8"];
+        webhook_update [label="Update order status\nTrigger receipt", fillcolor="#FFF9E6"];
+        webhook_ack [label="Return 200 OK", fillcolor="#E8F4F8", shape=ellipse];
+        
+        webhook_start -> webhook_verify;
+        webhook_verify -> webhook_valid;
+        webhook_valid -> webhook_reject [label="No"];
+        webhook_valid -> webhook_parse [label="Yes"];
+        webhook_parse -> webhook_success;
+        webhook_success -> webhook_update;
+        webhook_update -> webhook_ack;
+        webhook_reject -> webhook_ack [label="After logging"];
+    }
+    
+    // ============ LOGGING & ERROR HANDLING ============
+    subgraph cluster_logging {
+        label="Logging & Error Recovery";
+        style=filled;
+        fillcolor="#F5F5DC";
+        color="#8B4513";
+        
+        log_entry [label="Write to kassafu.log\n(JSON line format)", fillcolor="#FFF9E6"];
+        log_rotation [label="Check log age\nDelete >30 days", fillcolor="#FFF9E6"];
+        error_notify [label="Send error to\nmonitoring system", fillcolor="#FFE5CC"];
+        fallback_poll [label="Fallback to polling\n(if webhook fails)", fillcolor="#FFE5CC"];
+        
+        log_entry -> log_rotation;
+    }
+    
+    // ============ CONNECTIONS (Main to Providers) ============
+    process -> sumup_auth [label="Provider = sumup", style=bold, color="#2C3E50"];
+    process -> ccv_auth [label="Provider = ccv", style=dashed, color="#7F8C8D", constraint=false];
+    
+    // SumUp completion path
+    sumup_success -> receipt_start;
+    sumup_fail -> log_entry [label="Log failure"];
+    sumup_timeout -> log_entry [label="Log timeout"];
+    
+    // CCV completion path
+    ccv_success -> receipt_start [style=dashed];
+    ccv_fail -> log_entry [style=dashed];
+    
+    // Receipt completion
+    receipt_log -> log_entry;
+    receipt_skip -> log_entry [label="Log transaction"];
+    
+    // Final outputs
+    sumup_success -> final_success [label="Return to Angular", style=bold];
+    ccv_success -> final_success [label="Return to Angular", style=dashed];
+    
+    final_success [label="✅ Payment Complete\nTransaction ID returned", shape=ellipse, fillcolor="#90EE90"];
+    
+    sumup_fail -> final_failure;
+    sumup_timeout -> final_failure;
+    ccv_fail -> final_failure;
+    
+    final_failure [label="❌ Payment Failed\nError message returned", shape=ellipse, fillcolor="#FFB6C1"];
+    
+    // Connect logging to error handling
+    log_entry -> log_rotation;
+    error_notify -> fallback_poll [style=dotted];
+    fallback_poll -> process [label="Retry", style=dotted];
+    
+    // ============ TEST PATH (Highlighted) ============
+    subgraph cluster_test {
+        label="10-Cent Sandbox Test (Priority R8)";
+        style=filled;
+        fillcolor="#FFFFE0";
+        color="#FFD700";
+        
+        test_start [label="./test_kassafu.py", shape=ellipse, fillcolor="#FFD700"];
+        test_check [label="Verify SUMUP_MODE=sandbox", fillcolor="#FFF9E6"];
+        test_create [label="Create €0.10 checkout", fillcolor="#FFF9E6"];
+        test_virtual [label="Open Virtual Solo URL", fillcolor="#E8F4F8", shape=ellipse];
+        test_wait [label="Wait for manual tap\n(60s timeout)", fillcolor="#FFF9E6"];
+        test_result [label="Print: ✅ or ❌", fillcolor="#FFF9E6"];
+        
+        test_start -> test_check;
+        test_check -> test_create;
+        test_create -> test_virtual;
+        test_virtual -> test_wait;
+        test_wait -> test_result;
+    }
+    
+    // Link test to main flow (reference only)
+    test_create -> sumup_checkout [style=dotted, color="#FFD700", label="Uses same endpoint"];
+}
+
+

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-KassaFu Test Script - 10 cent sandbox payment
-This must be run in SANDBOX mode only
+KassaFu Test Script - 10 cent real payment
+This must be run in REAL mode only
 """
 
 import os
@@ -10,23 +10,24 @@ import time
 import json
 import requests
 from datetime import datetime
+from dotenv import load_dotenv
 
 def test_payment():
-    """Test 10 cent sandbox payment"""
-    print("🧪 KassaFu Test: 10 cent sandbox payment")
+    """Test 10 cent real payment"""
+    print("🧪 KassaFu Test: 10 cent real payment")
     
-    # Verify we're in sandbox mode
-    mode = os.getenv('SUMUP_MODE', 'sandbox')
-    if mode != 'sandbox':
-        print("❌ Test failed: Must be in SANDBOX mode")
-        print("   Set SUMUP_MODE=sandbox in .env file")
+    # Verify we're in sandbox mode or real mode.
+    mode = os.getenv('SUMUP_MODE', 'real')
+    if mode != 'real':
+        print("❌ Test failed: Must be in REAL mode")
+        print("   Set SUMUP_MODE=real in .env file")
         return False
     
     # Check if API key is set
     api_key = os.getenv('SUMUP_API_KEY', '')
     if not api_key:
         print("❌ Test failed: SUMUP_API_KEY not set in .env")
-        print("   Get your sandbox API key from SumUp dashboard")
+        print("   Get your real API key from SumUp dashboard")
         return False
     
     # Create test order
@@ -35,7 +36,7 @@ def test_payment():
     
     print(f"\n📝 Test order: {test_order_id}")
     print(f"💰 Amount: €0.10 (10 cents)")
-    print(f"🔧 Mode: SANDBOX (Virtual Solo: https://virtual-solo.sumup.com)")
+    print(f"🔧 Mode: REAL (Virtual Solo: https://virtual-solo.sumup.com)")
     
     # Make payment request
     print("\n⏳ Sending payment request...")
@@ -74,7 +75,7 @@ def test_payment():
             
     except requests.exceptions.ConnectionError:
         print("\n❌ Test failed: Cannot connect to KassaFu server")
-        print("   Make sure KassaFu is running: python kassafu.py --server")
+        print("   Make sure KassaFu is running: python3 kassafu.py --server")
         return False
     except requests.exceptions.Timeout:
         print("\n❌ Test failed: Payment timeout after 60 seconds")
@@ -85,16 +86,17 @@ def test_payment():
         return False
 
 if __name__ == "__main__":
+    load_dotenv()
     # Check if KassaFu is running
     try:
         health = requests.get('http://localhost:8888/health', timeout=2)
         if health.status_code != 200:
             print("⚠️  KassaFu server not responding properly")
-            print("   Start it with: python kassafu.py --server")
+            print("   Start it with: python3 kassafu.py --server")
             sys.exit(1)
     except:
         print("⚠️  KassaFu server is not running")
-        print("   In a separate terminal, run: python kassafu.py --server")
+        print("   In a separate terminal, run: python3 kassafu.py --server")
         sys.exit(1)
     
     # Run test
