@@ -78,3 +78,23 @@ uvicorn==0.24.0
 requests==2.31.0
 python-dotenv==1.0.0
 httpx==0.25.1
+
+# Integration SumUp payment terminal status
+
+When the reader is off-line:
+<img width="779" height="464" alt="image" src="https://github.com/user-attachments/assets/c850958c-4d19-4f6f-86c8-08a4916eaf5b" />
+
+When the reader is switched on:
+<img width="773" height="425" alt="image" src="https://github.com/user-attachments/assets/99a003a4-d4c2-402f-9ab1-8712771811de" />
+After this, I quickly connected it to the USB-charger. 1% is not that great.
+
+# Integration SumUp payment amount
+
+When the reader is on-line:
+<img width="780" height="313" alt="image" src="https://github.com/user-attachments/assets/c1076bca-a7dd-491b-8b06-ca8dce64871b" />
+
+Then we wait for the payment:
+<img width="781" height="401" alt="image" src="https://github.com/user-attachments/assets/8b20197a-80a5-4efd-b442-dda60537692f" />
+
+
+
