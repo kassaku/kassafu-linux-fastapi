@@ -35,7 +35,7 @@ pip install fastapi uvicorn
 
 # Configuration
 
-Create a `config.json` file:
+Create a `config.json` structure and send it:
 
 ```json
 {
@@ -48,6 +48,29 @@ Create a `config.json` file:
     "reader_id": "OPTIONAL_READER_ID"
   }
 }
+```
+## Example
+
+```
+curl -X POST http://127.0.0.1:8888/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app": {
+      "mode": "real"
+    },
+    "sumup": {
+      "api_key": "sk_live_xxxxxxxxxxxxxxxxx",
+      "merchant_code": "MERCHANT123",
+      "reader_id": "SOLO-ABC123"
+    }
+  }'
+```
+
+Instead of the entire json, feel free to send a file:
+```
+curl -X POST http://127.0.0.1:8888/config \
+-H "Content-Type: application/json" \
+-d @config.json
 ```
 
 ---
