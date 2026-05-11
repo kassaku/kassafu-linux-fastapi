@@ -203,6 +203,10 @@ GET /payment/status?order_id=ORDER-1001
 ```
 
 ---
+### Example Curl
+```
+curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
+```
 
 ### Pending Response
 
