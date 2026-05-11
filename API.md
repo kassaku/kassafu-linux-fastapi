@@ -18,7 +18,6 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
   - [GET /reader/status](#get-readerstatus)
   - [POST /config/reload](#post-configreload)
 - [Payment Flow](#payment-flow)
-- [POS Integration Examples](#pos-integration-examples)
 - [Error Handling](#error-handling)
 - [Logging](#logging)
 - [Security Notes](#security-notes)
@@ -367,31 +366,6 @@ SumUp Solo Terminal
 ```
 
 ---
-
-# Example POS Integration
-
-## Example
-
-```bash
-curl -X POST http://127.0.0.1:8888/pay \
-  -H "Content-Type: application/json" \
-  -d '{
-    "order_id": "ORDER-1001",
-    "amount_cents": 1250,
-    "currency": "EUR"
-  }'
-```
-
----
-
-## Poll Payment Status
-
-```bash
-curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
-```
-
----
-
 # Logging
 
 Logs are written to:
