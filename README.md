@@ -5,7 +5,7 @@ The Python program will handle communication to the POS computer and to the SumU
 # Restaurant overview
 Payments for payment terminals like SumUp, interface to Angular website as a backend.
 KassaFu — The payment bridge between SumUp terminals and your restaurant system.
-<img width="632" height="424" alt="image" src="https://github.com/user-attachments/assets/25eae3c6-bcdf-481e-aab4-350d7b3b29da" />
+<img width="623" height="424" alt="openart-image_1778505829245_5fb4cac4_1778505829356_c09c6fd8" src="https://github.com/user-attachments/assets/68ef0a0a-2006-4fc3-adbe-d1087c6f08e8" />
 
 # Requirements
 
