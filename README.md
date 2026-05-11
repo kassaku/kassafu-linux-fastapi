@@ -2,6 +2,11 @@
 The Python program will handle communication to the POS computer and to the SumUP server. It is located at the POS computer.
 <img width="632" height="424" alt="image" src="https://github.com/user-attachments/assets/4528b4fc-5068-4148-a87e-8f34c3d88c3e" />
 
+License: https://github.com/kassaku/kassafu-linux-fastapi/blob/main/LICENSE 
+Software: https://github.com/kassaku/kassafu-linux-fastapi/blob/main/SOFTWARE
+API: https://github.com/kassaku/kassafu-linux-fastapi/blob/main/API 
+Example: https://github.com/kassaku/kassafu-linux-fastapi/blob/main/test_real_payment.py  
+
 # Restaurant overview
 Payments for payment terminals like SumUp, interface to Angular website as a backend.
 KassaFu — The payment bridge between SumUp terminals and your restaurant system.
