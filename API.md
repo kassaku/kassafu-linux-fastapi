@@ -280,6 +280,8 @@ Reload the configuration file without restarting the application.
 
 # Payment Flow
 
+<img width="2528" height="1696" alt="openart-image_1778071063732_b27b5707_1778071063856_cae207be" src="https://github.com/user-attachments/assets/4ef3b4b4-70d9-49bc-a926-f2e65f2531ae" />
+
 ```text
 POS System
     |
