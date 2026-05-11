@@ -3,6 +3,27 @@
 KassaFu is a payment bridge between a POS system and a SumUp Solo terminal.
 It exposes a REST API built with FastAPI to process payments, monitor terminal status, and manage configuration.
 
+# Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Server](#running-the-server)
+- [API Endpoints](#api-endpoints)
+  - [POST /pay](#post-pay)
+  - [GET /payment/status](#get-paymentstatus)
+  - [GET /health](#get-health)
+  - [GET /reader/status](#get-readerstatus)
+  - [POST /config/reload](#post-configreload)
+- [Payment Flow](#payment-flow)
+- [POS Integration Examples](#pos-integration-examples)
+- [Error Handling](#error-handling)
+- [Logging](#logging)
+- [Security Notes](#security-notes)
+- [License](#license)
+  
 ---
 
 # Features
@@ -119,8 +140,6 @@ Start a payment request.
 | order_id     | string  | Yes      | Unique order identifier |
 | amount_cents | integer | Yes      | Amount in cents         |
 | currency     | string  | Yes      | Currency code           |
-
----
 
 ### Example
 
@@ -270,9 +289,7 @@ At start of the program you should check if the service is activated. If not, in
 ```
 curl http://127.0.0.1:8888/health
 ```
-
 Health check endpoint.
----
 
 ### Example Response
 
