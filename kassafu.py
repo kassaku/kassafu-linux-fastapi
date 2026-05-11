@@ -24,7 +24,8 @@ SOFTWARE.
 """
 
 import asyncio
-import os
+import json
+import sys
 import logging
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -32,18 +33,27 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
-from dotenv import load_dotenv
 
 from sumup_terminal import SumUpTerminal
 
-load_dotenv()
+# Configuration file
+CONFIG_FILE = "config.json"
 
-# Configuration from environment
-SUMUP_API_KEY = os.getenv('SUMUP_API_KEY', '')
-SUMUP_MERCHANT_CODE = os.getenv('SUMUP_MERCHANT_CODE', '')
-SUMUP_READER_ID = os.getenv('SUMUP_READER_ID', '')  # Optional
-SUMUP_MODE = os.getenv('SUMUP_MODE', 'sandbox')
-PORT = int(os.getenv('PORT', 8888))
+# Load configuration from JSON file
+def load_config_from_file(config_path: str = CONFIG_FILE) -> dict:
+    """Load configuration from JSON file"""
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        logger.info(f"✅ Loaded configuration from {config_path}")
+        return config
+    except FileNotFoundError:
+        logger.error(f"❌ Config file {config_path} not found")
+        logger.error(f"   Please create {config_path} with your SumUp credentials")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Invalid JSON in {config_path}: {e}")
+        sys.exit(1)
 
 # Logging setup
 logging.basicConfig(
@@ -56,6 +66,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Load configuration
+config = load_config_from_file()
+
+# Extract configuration values
+APP_MODE = config.get("app", {}).get("mode", "real")
+SUMUP_API_KEY = config.get("sumup", {}).get("api_key", "")
+SUMUP_MERCHANT_CODE = config.get("sumup", {}).get("merchant_code", "")
+SUMUP_READER_ID = config.get("sumup", {}).get("reader_id", "")
+PORT = 8888
+
 # Global variables
 terminal: Optional[SumUpTerminal] = None
 payment_queue = asyncio.Queue()
@@ -67,31 +87,33 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     global terminal
     
-    logger.info(f"KassaFu starting in {SUMUP_MODE} mode on port {PORT}")
+    logger.info(f"KassaFu starting in {APP_MODE} mode on port {PORT}")
     
     # Validate configuration
     if not SUMUP_API_KEY:
-        logger.error("Missing SUMUP_API_KEY in environment")
+        logger.error("Missing sumup.api_key in configuration")
+        logger.error("Please edit config.json and add your SumUp API key")
         raise RuntimeError("SUMUP_API_KEY is required")
     
     if not SUMUP_MERCHANT_CODE:
-        logger.error("Missing SUMUP_MERCHANT_CODE in environment")
+        logger.error("Missing sumup.merchant_code in configuration")
+        logger.error("Please edit config.json and add your merchant code")
         raise RuntimeError("SUMUP_MERCHANT_CODE is required")
     
-    # Initialize terminal with environment values
-    terminal = SumUpTerminal(
-        api_key=SUMUP_API_KEY,
-        merchant_code=SUMUP_MERCHANT_CODE,
-        reader_id=SUMUP_READER_ID if SUMUP_READER_ID else None
-    )
+    # Initialize terminal (no constructor parameters!)
+    terminal = SumUpTerminal()
+    
+    # Initialize with configuration
+    if not terminal.init(config):
+        logger.error("Failed to initialize terminal with configuration")
+        raise RuntimeError("Terminal initialization failed")
     
     # Discover reader if not manually specified
     if not terminal.reader_id:
         logger.info("No reader ID provided, discovering...")
         await terminal.discover_reader()
-    else:
-        terminal._is_ready = True
-        logger.info(f"✅ Using configured Solo terminal: {terminal.reader_id}")
+        if not terminal.reader_id:
+            logger.warning("⚠️ No Solo terminal found. Please check your SumUp account.")
     
     # Start payment queue processor
     asyncio.create_task(process_payment_queue())
@@ -163,19 +185,109 @@ async def pay(payment_data: dict):
     return result
 
 
+@app.get("/payment/status")
+async def get_payment_status(order_id: str):
+    """
+    Get payment status for an order.
+    POS calls this every few seconds to check if payment is complete.
+    """
+    global terminal
+    
+    if not terminal:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "Terminal not ready"}
+        )
+    
+    # Check if terminal has a current payment
+    if not terminal.current_order_id:
+        return {
+            "status": "idle",
+            "message": "No active payment"
+        }
+    
+    # If this order_id doesn't match current payment
+    if terminal.current_order_id != order_id:
+        return {
+            "status": "not_found",
+            "message": f"No payment found for order {order_id}"
+        }
+    
+    # If payment already completed or failed, return cached status
+    if terminal.current_status in ["paid", "failed", "cancelled"]:
+        return {
+            "status": terminal.current_status,
+            "order_id": terminal.current_order_id,
+            "amount": terminal.current_amount_cents / 100,
+            "currency": terminal.current_currency,
+            "message": "Payment completed" if terminal.current_status == "paid" else "Payment failed"
+        }
+    
+    # Check transaction status with SumUp API
+    if terminal.current_transaction_id:
+        transaction_status = await terminal.get_transaction_status(terminal.current_transaction_id)
+        
+        if transaction_status == "SUCCESSFUL":
+            terminal.current_status = "paid"
+            logger.info(f"✅ Payment for order {order_id} completed")
+            return {
+                "status": "paid",
+                "order_id": terminal.current_order_id,
+                "amount": terminal.current_amount_cents / 100,
+                "currency": terminal.current_currency,
+                "message": "Payment completed successfully"
+            }
+        
+        elif transaction_status in ["FAILED", "CANCELLED"]:
+            terminal.current_status = "failed"
+            
+            # Determine specific error message
+            # Try to get more details from the transaction if available
+            error_message = "Card rejected - please try another payment method"
+            
+            # You can enhance this by checking the actual API response
+            # For now, use a generic message
+            logger.warning(f"❌ Payment for order {order_id} {transaction_status}")
+            
+            return {
+                "status": "failed",
+                "order_id": terminal.current_order_id,
+                "amount": terminal.current_amount_cents / 100,
+                "currency": terminal.current_currency,
+                "message": error_message
+            }
+        
+        else:
+            # Still pending
+            return {
+                "status": "pending",
+                "order_id": terminal.current_order_id,
+                "amount": terminal.current_amount_cents / 100,
+                "currency": terminal.current_currency
+            }
+    
+    # No transaction ID yet - still pending
+    return {
+        "status": "pending",
+        "order_id": terminal.current_order_id,
+        "amount": terminal.current_amount_cents / 100,
+        "currency": terminal.current_currency
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint"""
     if not terminal:
         return {
             "status": "initializing",
-            "mode": SUMUP_MODE,
+            "mode": APP_MODE,
             "terminal_ready": False
         }
     
     return {
         "status": "healthy",
-        "mode": SUMUP_MODE,
+        "mode": APP_MODE,
         "terminal_ready": terminal.is_ready,
         "reader_id": terminal.reader_id
     }
@@ -195,5 +307,25 @@ async def get_reader_status():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")
-
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="KassaFu Payment Bridge")
+    parser.add_argument("--server", action="store_true", help="Run in server mode")
+    parser.add_argument("--config", type=str, default="config.json", help="Configuration file path")
+    parser.add_argument("--port", type=int, help="Override port (default: 8888)")
+    args = parser.parse_args()
+    
+    # Update CONFIG_FILE if specified
+    if args.config != "config.json":
+        CONFIG_FILE = args.config
+        config = load_config_from_file(CONFIG_FILE)
+    
+    # Override port if specified
+    port = args.port if args.port else 8888
+    
+    if args.server:
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    else:
+        print("Usage: python3 kassafu.py --server")
+        print("Optional: --config /path/to/config.json")
+        print("Optional: --port 8888")
