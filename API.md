@@ -16,7 +16,6 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
   - [GET /payment/status](#get-paymentstatus)
   - [GET /health](#get-health)
   - [GET /reader/status](#get-readerstatus)
-  - [POST /config/reload](#post-configreload)
 - [Payment Flow](#payment-flow)
 - [Error Handling](#error-handling)
 - [Logging](#logging)
@@ -31,7 +30,7 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
 * Queue-based payment handling
 * SumUp Solo integration
 * Live payment status polling
-* Dynamic configuration reload
+* Dynamic configuration update
 * Health and terminal monitoring
 * Async payment processing
 
@@ -318,33 +317,6 @@ Check the SumUp Solo terminal status.
 ```
 
 ---
-
-## POST `/config/reload`
-
-Reload the configuration file without restarting the application.
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "message": "Configuration reloaded"
-}
-```
-
----
-
-### Failure Response
-
-```json
-{
-  "success": false,
-  "message": "Failed to reinitialize terminal"
-}
-```
-
----
-
 # Payment Flow
 
 <img width="2528" height="1696" alt="openart-image_1778071063732_b27b5707_1778071063856_cae207be" src="https://github.com/user-attachments/assets/4ef3b4b4-70d9-49bc-a926-f2e65f2531ae" />
@@ -380,7 +352,7 @@ Log output includes:
 * Queue events
 * Terminal initialization
 * Errors and warnings
-* Configuration reloads
+* Configuration udate
 
 ---
 
