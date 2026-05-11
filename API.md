@@ -99,6 +99,19 @@ Start a payment request.
 
 ---
 
+### Example
+
+```
+curl -X POST http://127.0.0.1:8888/pay \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "ORDER-2026-0001",
+    "amount_cents": 1599,
+    "currency": "EUR"
+  }'
+```
+---
+
 ### Success Response
 
 ```json
@@ -149,7 +162,8 @@ If another payment is already active:
 
 ## GET `/payment/status`
 
-Check the status of a payment.
+Check the status of a payment. After starting any payment, do this for 32 seconds every 2 seconds until an issue happened or until it is payed.
+The python file **test_real_payment.py** has a good example of this behavior.
 
 ### Query Parameters
 
@@ -221,7 +235,17 @@ GET /payment/status?order_id=ORDER-1001
 
 ## GET `/health`
 
+Just to check if the service is running correct. This does not communicate with SumUp.
+
+### Example
+At start of the program you should check if the service is activated. If not, installation is failed or start the service.  
+
+```
+curl http://127.0.0.1:8888/health
+```
+
 Health check endpoint.
+---
 
 ### Example Response
 
@@ -232,7 +256,7 @@ Health check endpoint.
   "terminal_ready": true,
   "reader_id": "SOLO-123456"
 }
-```
+```curl http://127.0.0.1:8888/health
 
 ---
 
@@ -302,7 +326,7 @@ SumUp Solo Terminal
 
 # Example POS Integration
 
-## Start Payment
+## Example
 
 ```bash
 curl -X POST http://127.0.0.1:8888/pay \
