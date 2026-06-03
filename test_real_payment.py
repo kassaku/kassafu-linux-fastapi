@@ -30,7 +30,7 @@ import time
 import json
 import requests
 from datetime import datetime
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, Union
 from dotenv import load_dotenv
 
 # Constants
@@ -39,7 +39,7 @@ POLL_INTERVAL = 2  # seconds
 MAX_POLL_ATTEMPTS = 30  # 30 * 2 = 60 seconds max wait
 
 
-def check_server_health() -> Tuple[bool, str]:
+def check_server_health() -> Tuple[bool, str, int]:
     """Check if KassaFu server is running and healthy."""
     try:
         response = requests.get(f'{KASSAFU_URL}/health', timeout=2)
@@ -48,17 +48,17 @@ def check_server_health() -> Tuple[bool, str]:
             mode = health_data.get('mode', 'unknown')
             terminal_ready = health_data.get('terminal_ready', False)
             if terminal_ready:
-                return True, f"Server running (mode: {mode})"
+                return True, f"Server running (mode: {mode})", 0
             else:
-                return True, f"Server running but terminal not ready (mode: {mode})"
+                return True, f"Server running but terminal not ready (mode: {mode})", 108008
         else:
-            return False, f"Server responded with HTTP {response.status_code}"
+            return False, f"Server responded with HTTP {response.status_code}", 108011
     except requests.exceptions.ConnectionError:
-        return False, "Server not running"
+        return False, "Server not running", 108004
     except requests.exceptions.Timeout:
-        return False, "Server timeout"
+        return False, "Server timeout", 108005
     except Exception as e:
-        return False, f"Error: {e}"
+        return False, f"Error: {e}", 108001
 
 
 def check_reader_status() -> Tuple[bool, str, Optional[Dict]]:
@@ -68,6 +68,7 @@ def check_reader_status() -> Tuple[bool, str, Optional[Dict]]:
         
         if response.status_code == 200:
             status = response.json()
+            status['error_code'] = status.get('error_code', 0)
             
             if status.get('error'):
                 error_msg = status.get('error')
@@ -85,14 +86,14 @@ def check_reader_status() -> Tuple[bool, str, Optional[Dict]]:
             else:
                 return False, "Reader is offline", status
         elif response.status_code == 503:
-            return False, "Terminal not configured", None
+            return False, "Terminal not configured", {"error_code": 108008}
         else:
-            return False, f"HTTP {response.status_code}", None
+            return False, f"HTTP {response.status_code}", {"error_code": 108011}
             
     except requests.exceptions.Timeout:
-        return False, "Status check timeout", None
+        return False, "Status check timeout", {"error_code": 108005}
     except Exception as e:
-        return False, f"Status check failed: {e}", None
+        return False, f"Status check failed: {e}", {"error_code": 108001}
 
 
 def initiate_payment(order_id: str, amount_cents: int) -> Tuple[bool, str, Optional[Dict]]:
@@ -110,20 +111,21 @@ def initiate_payment(order_id: str, amount_cents: int) -> Tuple[bool, str, Optio
         
         if response.status_code == 200:
             result = response.json()
+            result.setdefault('error_code', 0 if result.get('success') else 108009)
             
             if result.get('success'):
                 return True, "Payment initiated", result
             else:
                 return False, result.get('message', 'Unknown error'), result
         else:
-            return False, f"HTTP {response.status_code}: {response.text}", None
+            return False, f"HTTP {response.status_code}: {response.text}", {"error_code": 108011}
             
     except requests.exceptions.ConnectionError:
-        return False, "Cannot connect to KassaFu server", None
+        return False, "Cannot connect to KassaFu server", {"error_code": 108004}
     except requests.exceptions.Timeout:
-        return False, "Request timeout", None
+        return False, "Request timeout", {"error_code": 108005}
     except Exception as e:
-        return False, f"Error: {e}", None
+        return False, f"Error: {e}", {"error_code": 108001}
 
 
 def poll_payment_status(order_id: str, max_attempts: int = MAX_POLL_ATTEMPTS) -> Tuple[bool, str, Optional[Dict]]:
@@ -151,11 +153,9 @@ def poll_payment_status(order_id: str, max_attempts: int = MAX_POLL_ATTEMPTS) ->
                     amount = status_data.get('amount', 0)
                     return True, f"Payment complete (€{amount})", status_data
                 elif payment_status == 'failed':
-                    # Get the reason from the response
                     reason = status_data.get('message', 'Payment failed')
                     return False, reason, status_data
                 elif payment_status == 'pending':
-                    # Still waiting, show progress every few attempts
                     if attempt > 0 and attempt % 5 == 0:
                         print(f"   Still waiting... ({attempt * POLL_INTERVAL}s)", end='\r')
                     time.sleep(POLL_INTERVAL)
@@ -163,16 +163,16 @@ def poll_payment_status(order_id: str, max_attempts: int = MAX_POLL_ATTEMPTS) ->
                 else:
                     return False, f"Unknown status: {payment_status}", status_data
             else:
-                return False, f"Status check failed: HTTP {response.status_code}", None
+                return False, f"Status check failed: HTTP {response.status_code}", {"error_code": 108011}
                 
         except requests.exceptions.Timeout:
             print(f"\n   Timeout on attempt {attempt + 1}, retrying...")
             time.sleep(POLL_INTERVAL)
             continue
         except Exception as e:
-            return False, f"Status check error: {e}", None
+            return False, f"Status check error: {e}", {"error_code": 108001}
     
-    return False, f"Timeout after {max_attempts * POLL_INTERVAL} seconds", None
+    return False, f"Timeout after {max_attempts * POLL_INTERVAL} seconds", {"error_code": 108005}
 
 
 def test_payment():
@@ -183,18 +183,19 @@ def test_payment():
     
     # Step 1: Check if KassaFu server is running
     print("\n📡 Step 1: Checking KassaFu server...")
-    server_ok, server_msg = check_server_health()
+    server_ok, server_msg, server_code = check_server_health()
     if not server_ok:
-        print(f"   ❌ {server_msg}")
+        print(f"   ❌ [{server_code}] {server_msg}")
         print("   Start it with: python3 kassafu.py --server")
         return False
-    print(f"   ✅ {server_msg}")
+    print(f"   ✅ [{server_code}] {server_msg}")
     
     # Step 2: Check reader status
     print("\n📡 Step 2: Checking reader status...")
     reader_ok, reader_msg, reader_status = check_reader_status()
     if not reader_ok:
-        print(f"   ❌ {reader_msg}")
+        reader_code = reader_status.get('error_code', 108010) if reader_status else 108010
+        print(f"   ❌ [{reader_code}] {reader_msg}")
         if reader_status and reader_status.get('error'):
             if '401' in reader_status.get('error', ''):
                 print("   → API key is invalid. Check config.json")
@@ -202,7 +203,7 @@ def test_payment():
                 print("   → Reader not found. Check reader_id in config.json")
         print("\n❌ Test failed: Terminal offline")
         return False
-    print(f"   ✅ {reader_msg}")
+    print(f"   ✅ [0] {reader_msg}")
     
     # Show battery/connection info if available
     if reader_status:
@@ -225,21 +226,23 @@ def test_payment():
     print("   Please tap your card on the Solo terminal")
     
     init_success, init_msg, init_data = initiate_payment(test_order_id, amount_cents)
+    init_code = init_data.get('error_code', 108001) if init_data else 108001
     if not init_success:
-        print(f"   ❌ {init_msg}")
+        print(f"   ❌ [{init_code}] {init_msg}")
         return False
-    print(f"   ✅ {init_msg}")
+    print(f"   ✅ [{init_code}] {init_msg}")
     
     # Step 5: Wait for payment completion
     print("\n⏳ Step 5: Waiting for payment...")
     success, final_message, status_data = poll_payment_status(test_order_id)
     
     # Step 6: Final result
+    final_code = status_data.get('error_code', 0) if status_data else (0 if success else 108001)
     print("\n" + "=" * 50)
     if success:
-        print(f"✅ TEST PASSED - {final_message}")
+        print(f"✅ TEST PASSED [0] - {final_message}")
     else:
-        print(f"❌ TEST FAILED - {final_message}")
+        print(f"❌ TEST FAILED [{final_code}] - {final_message}")
     print("=" * 50)
     
     return success

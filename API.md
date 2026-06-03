@@ -16,6 +16,8 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
   - [GET /payment/status](#get-paymentstatus)
   - [GET /health](#get-health)
   - [GET /reader/status](#get-readerstatus)
+- [GET /config](#get-config)
+- [POST /config](#post-config)
 - [Payment Flow](#payment-flow)
 - [Error Handling](#error-handling)
 - [Logging](#logging)
@@ -54,43 +56,11 @@ pip install fastapi uvicorn
 
 # Configuration
 
-Create a `config.json` structure and send it:
+## Runtime Configuration
 
-```json
-{
-  "app": {
-    "mode": "real"
-  },
-  "sumup": {
-    "api_key": "YOUR_API_KEY",
-    "merchant_code": "YOUR_MERCHANT_CODE",
-    "reader_id": "OPTIONAL_READER_ID"
-  }
-}
-```
-## Example
+KassaFu exposes a runtime configuration API. All changes are **in-memory only** and do not persist across server restarts. To make permanent changes, edit `config.json` directly.
 
-```
-curl -X POST http://127.0.0.1:8888/config \
-  -H "Content-Type: application/json" \
-  -d '{
-    "app": {
-      "mode": "real"
-    },
-    "sumup": {
-      "api_key": "sk_live_xxxxxxxxxxxxxxxxx",
-      "merchant_code": "MERCHANT123",
-      "reader_id": "SOLO-ABC123"
-    }
-  }'
-```
-
-Instead of the entire json, feel free to send a file:
-```
-curl -X POST http://127.0.0.1:8888/config \
--H "Content-Type: application/json" \
--d @config.json
-```
+See the [GET /config](#get-config) and [POST /config](#post-config) endpoints below.
 
 ---
 
@@ -160,7 +130,8 @@ curl -X POST http://127.0.0.1:8888/pay \
   "order_id": "ORDER-1001",
   "amount": 12.5,
   "currency": "EUR",
-  "message": "Payment completed successfully"
+  "message": "Payment completed successfully",
+  "error_code": 0
 }
 ```
 
@@ -174,7 +145,8 @@ If another payment is already active:
 {
   "success": false,
   "status": "queued",
-  "message": "Payment in progress, request queued"
+  "message": "Payment in progress, request queued",
+  "error_code": 108012
 }
 ```
 
@@ -232,7 +204,8 @@ curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
   "status": "pending",
   "order_id": "ORDER-1001",
   "amount": 12.5,
-  "currency": "EUR"
+  "currency": "EUR",
+  "error_code": 0
 }
 ```
 
@@ -246,7 +219,8 @@ curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
   "order_id": "ORDER-1001",
   "amount": 12.5,
   "currency": "EUR",
-  "message": "Payment completed successfully"
+  "message": "Payment completed successfully",
+  "error_code": 0
 }
 ```
 
@@ -260,7 +234,8 @@ curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
   "order_id": "ORDER-1001",
   "amount": 12.5,
   "currency": "EUR",
-  "message": "Card rejected - please try another payment method"
+  "message": "Card rejected - please try another payment method",
+  "error_code": 108009
 }
 ```
 
@@ -271,7 +246,8 @@ curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
 ```json
 {
   "status": "idle",
-  "message": "No active payment"
+  "message": "No active payment",
+  "error_code": 0
 }
 ```
 
@@ -296,7 +272,8 @@ Health check endpoint.
   "status": "healthy",
   "mode": "real",
   "terminal_ready": true,
-  "reader_id": "SOLO-123456"
+  "reader_id": "SOLO-123456",
+  "error_code": 0
 }
 ```curl http://127.0.0.1:8888/health
 
@@ -312,11 +289,118 @@ Check the SumUp Solo terminal status.
 {
   "status": "online",
   "battery": 95,
-  "reader_id": "SOLO-123456"
+  "reader_id": "SOLO-123456",
+  "error_code": 0
+}
+```
+---
+
+## GET `/config`
+
+Return the current runtime configuration. The `api_key` is intentionally excluded from the response.
+
+### Example
+
+```
+curl http://127.0.0.1:8888/config
+```
+
+### Example Response
+
+```json
+{
+  "app": {
+    "mode": "real"
+  },
+  "sumup": {
+    "merchant_code": "MN2RA8M1",
+    "reader_id": "rdr_6P0860A4S186MV3FHM2Q185AD7",
+    "timeout_seconds": 30
+  }
 }
 ```
 
 ---
+
+## POST `/config`
+
+Update configuration at runtime. Accepts a full or partial configuration object. Only the provided fields are updated; omitted fields retain their current values. Changes are **in-memory only** — edit `config.json` to make permanent changes.
+
+If `reader_id` is omitted, the server will attempt to auto-discover a Solo terminal on the merchant account.
+
+### Request Body
+
+```json
+{
+  "app": {
+    "mode": "real"
+  },
+  "sumup": {
+    "api_key": "sup_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "merchant_code": "MN2RA8M1",
+    "reader_id": "rdr_6P0860A4S186MV3FHM2Q185AD7"
+  }
+}
+```
+
+### Example
+
+Send a full configuration update:
+
+```
+curl -X POST http://127.0.0.1:8888/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app": {
+      "mode": "real"
+    },
+    "sumup": {
+      "api_key": "sup_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "merchant_code": "MN2RA8M1",
+      "reader_id": "rdr_6P0860A4S186MV3FHM2Q185AD7"
+    }
+  }'
+```
+
+Send only the fields you want to change (partial update):
+
+```
+curl -X POST http://127.0.0.1:8888/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sumup": {
+      "api_key": "sup_sk_new_key_here"
+    }
+  }'
+```
+
+Send from a file:
+
+```
+curl -X POST http://127.0.0.1:8888/config \
+  -H "Content-Type: application/json" \
+  -d @config.json
+```
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "message": "Configuration updated"
+}
+```
+
+### Error Response
+
+```json
+{
+  "detail": "Invalid configuration"
+}
+```
+
+---
+
 # Payment Flow
 
 <img width="2528" height="1696" alt="openart-image_1778071063732_b27b5707_1778071063856_cae207be" src="https://github.com/user-attachments/assets/4ef3b4b4-70d9-49bc-a926-f2e65f2531ae" />
@@ -367,6 +451,28 @@ KassaFu returns standard HTTP status codes.
 | 400  | Bad request           |
 | 500  | Internal server error |
 | 503  | Terminal unavailable  |
+
+## Error Codes
+
+Every JSON response includes an `error_code` field. `0` means success. Non-zero values indicate a specific error condition:
+
+| Error Code | Description |
+|------------|-------------|
+| 0 | Success / no error |
+| 108001 | General error |
+| 108002 | Not found |
+| 108003 | Missing or invalid configuration |
+| 108004 | Connection error |
+| 108005 | Timeout |
+| 108006 | Initialization error |
+| 108007 | Validation error |
+| 108008 | Not ready / offline |
+| 108009 | Payment failed / rejected |
+| 108010 | Reader / terminal error |
+| 108011 | API error (HTTP error from upstream) |
+| 108012 | Payment queued |
+| 108013 | Cancelled |
+| 108051 | File / input error (scripts) |
 
 ---
 

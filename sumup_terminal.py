@@ -191,10 +191,10 @@ class SumUpTerminal:
             Dict with status information including online status, battery level, etc.
         """
         if not self.reader_id:
-            return {"online": False, "ready": False, "error": "No reader ID configured"}
+            return {"online": False, "ready": False, "error": "No reader ID configured", "error_code": 108010}
         
         if not self.api_key:
-            return {"online": False, "ready": False, "error": "No API key configured"}
+            return {"online": False, "ready": False, "error": "No API key configured", "error_code": 108003}
         
         url = f"https://api.sumup.com/v0.1/merchants/{self.merchant_code}/readers/{self.reader_id}/status"
         headers = {"Authorization": f"Bearer {self.api_key}"}
@@ -206,23 +206,30 @@ class SumUpTerminal:
                 if response.status_code == 200:
                     status_data = response.json()
                     device_status = status_data.get("data", {})
+                    logger.info(f"Raw status response: battery_level={device_status.get('battery_level')}")
                     
                     is_online = device_status.get("status") == "ONLINE"
                     is_idle = device_status.get("state") == "IDLE"
                     
+                    raw_battery = device_status.get("battery_level")
+                    if raw_battery is not None and raw_battery <= 1.0:
+                        battery_pct = int(round(raw_battery * 100))
+                    else:
+                        battery_pct = raw_battery
+                    
                     return {
                         "online": is_online,
                         "ready": is_online and is_idle,
-                        "battery": device_status.get("battery_level"),
+                        "battery": battery_pct,
                         "connection": device_status.get("connection_type"),
                         "firmware": device_status.get("firmware_version"),
                         "last_activity": device_status.get("last_activity"),
                         "state": device_status.get("state"),
                     }
                 else:
-                    return {"online": False, "ready": False, "error": f"HTTP {response.status_code}"}
+                    return {"online": False, "ready": False, "error": f"HTTP {response.status_code}", "error_code": 108011}
             except Exception as e:
-                return {"online": False, "ready": False, "error": str(e)}
+                return {"online": False, "ready": False, "error": str(e), "error_code": 108001}
     
     
     async def get_transaction_status(self, transaction_id: str) -> str:
@@ -318,7 +325,8 @@ class SumUpTerminal:
             return {
                 "success": False,
                 "status": "failed",
-                "message": "Terminal not initialized. Call init() first."
+                "message": "Terminal not initialized. Call init() first.",
+                "error_code": 108006
             }
         
         if not self.reader_id:
@@ -326,7 +334,8 @@ class SumUpTerminal:
             return {
                 "success": False,
                 "status": "failed",
-                "message": "No Solo terminal connected"
+                "message": "No Solo terminal connected",
+                "error_code": 108010
             }
         
         logger.info(f"Processing payment for order {order_id}: {amount_cents/100} {currency}")
@@ -363,7 +372,8 @@ class SumUpTerminal:
                 "success": True,
                 "transaction_id": self.current_transaction_id,
                 "status": "pending",
-                "message": "Payment initiated on Solo terminal"
+                "message": "Payment initiated on Solo terminal",
+                "error_code": 0
             }
             
         except asyncio.TimeoutError:
@@ -372,7 +382,8 @@ class SumUpTerminal:
             return {
                 "success": False,
                 "status": "failed",
-                "message": f"Timeout after {timeout_seconds} seconds"
+                "message": f"Timeout after {timeout_seconds} seconds",
+                "error_code": 108005
             }
         except Exception as e:
             logger.error(f"Payment failed: {e}")
@@ -380,7 +391,8 @@ class SumUpTerminal:
             return {
                 "success": False,
                 "status": "failed",
-                "message": str(e)
+                "message": str(e),
+                "error_code": 108001
             }
     
     

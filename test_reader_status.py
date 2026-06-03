@@ -36,13 +36,13 @@ def test_reader_status():
     try:
         health = requests.get('http://localhost:8888/health', timeout=2)
         if health.status_code != 200:
-            print("❌ KassaFu server not responding properly")
+            print("❌ [108011] KassaFu server not responding properly")
             print("   Start it with: python3 kassafu.py --server")
             return False
         health_data = health.json()
-        print(f"✅ KassaFu server running (mode: {health_data.get('mode', 'unknown')})")
+        print(f"✅ [0] KassaFu server running (mode: {health_data.get('mode', 'unknown')})")
     except requests.exceptions.ConnectionError:
-        print("❌ KassaFu server is not running")
+        print("❌ [108004] KassaFu server is not running")
         print("   In a separate terminal, run: python3 kassafu.py --server")
         return False
     
@@ -56,9 +56,11 @@ def test_reader_status():
             status = response.json()
             
             # Display reader information
+            code = status.get('error_code', 0)
             print("\n📡 READER STATUS:")
             print(f"   Online: {'✅ Yes' if status.get('online') else '❌ No'}")
             print(f"   Ready:  {'✅ Yes' if status.get('ready') else '❌ No'}")
+            print(f"   Error code: {code}")
             
             if status.get('battery') is not None:
                 print(f"   Battery: {status.get('battery')}%")
@@ -77,14 +79,14 @@ def test_reader_status():
             # Final verdict
             print("\n" + "="*40)
             if status.get('online') and status.get('ready'):
-                print("✅ READER IS ONLINE AND READY FOR PAYMENTS")
+                print(f"✅ [0] READER IS ONLINE AND READY FOR PAYMENTS")
                 return True
             elif status.get('online'):
-                print("⚠️  READER IS ONLINE BUT NOT IDLE")
+                print(f"⚠️  [{code}] READER IS ONLINE BUT NOT IDLE")
                 print(f"   Current state: {status.get('state')}")
                 return False
             else:
-                print("❌ READER IS OFFLINE")
+                print(f"❌ [{code}] READER IS OFFLINE")
                 print("   Please check:")
                 print("   1. Is the Solo terminal powered on?")
                 print("   2. Does it have internet connection (Wi-Fi/Cellular)?")
@@ -92,18 +94,18 @@ def test_reader_status():
                 return False
                 
         elif response.status_code == 503:
-            print("❌ Terminal not configured or not ready")
+            print("❌ [108008] Terminal not configured or not ready")
             return False
         else:
-            print(f"❌ Unexpected response: {response.status_code}")
+            print(f"❌ [108011] Unexpected response: {response.status_code}")
             print(f"   {response.text}")
             return False
             
     except requests.exceptions.Timeout:
-        print("❌ Status check timed out")
+        print("❌ [108005] Status check timed out")
         return False
     except Exception as e:
-        print(f"❌ Status check failed: {e}")
+        print(f"❌ [108001] Status check failed: {e}")
         return False
 
 def test_payment_exists():

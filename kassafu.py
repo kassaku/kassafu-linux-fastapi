@@ -171,7 +171,8 @@ async def pay(payment_data: dict):
             content={
                 "success": False,
                 "status": "queued",
-                "message": "Payment in progress, request queued"
+                "message": "Payment in progress, request queued",
+                "error_code": 108012
             }
         )
     
@@ -196,21 +197,23 @@ async def get_payment_status(order_id: str):
     if not terminal:
         return JSONResponse(
             status_code=503,
-            content={"status": "error", "message": "Terminal not ready"}
+            content={"status": "error", "message": "Terminal not ready", "error_code": 108008}
         )
     
     # Check if terminal has a current payment
     if not terminal.current_order_id:
         return {
             "status": "idle",
-            "message": "No active payment"
+            "message": "No active payment",
+            "error_code": 0
         }
     
     # If this order_id doesn't match current payment
     if terminal.current_order_id != order_id:
         return {
             "status": "not_found",
-            "message": f"No payment found for order {order_id}"
+            "message": f"No payment found for order {order_id}",
+            "error_code": 108002
         }
     
     # If payment already completed or failed, return cached status
@@ -220,7 +223,8 @@ async def get_payment_status(order_id: str):
             "order_id": terminal.current_order_id,
             "amount": terminal.current_amount_cents / 100,
             "currency": terminal.current_currency,
-            "message": "Payment completed" if terminal.current_status == "paid" else "Payment failed"
+            "message": "Payment completed" if terminal.current_status == "paid" else "Payment failed",
+            "error_code": 0 if terminal.current_status == "paid" else 108009
         }
     
     # Check transaction status with SumUp API
@@ -235,7 +239,8 @@ async def get_payment_status(order_id: str):
                 "order_id": terminal.current_order_id,
                 "amount": terminal.current_amount_cents / 100,
                 "currency": terminal.current_currency,
-                "message": "Payment completed successfully"
+                "message": "Payment completed successfully",
+                "error_code": 0
             }
         
         elif transaction_status in ["FAILED", "CANCELLED"]:
@@ -254,7 +259,8 @@ async def get_payment_status(order_id: str):
                 "order_id": terminal.current_order_id,
                 "amount": terminal.current_amount_cents / 100,
                 "currency": terminal.current_currency,
-                "message": error_message
+                "message": error_message,
+                "error_code": 108009
             }
         
         else:
@@ -263,7 +269,8 @@ async def get_payment_status(order_id: str):
                 "status": "pending",
                 "order_id": terminal.current_order_id,
                 "amount": terminal.current_amount_cents / 100,
-                "currency": terminal.current_currency
+                "currency": terminal.current_currency,
+                "error_code": 0
             }
     
     # No transaction ID yet - still pending
@@ -271,7 +278,8 @@ async def get_payment_status(order_id: str):
         "status": "pending",
         "order_id": terminal.current_order_id,
         "amount": terminal.current_amount_cents / 100,
-        "currency": terminal.current_currency
+        "currency": terminal.current_currency,
+        "error_code": 0
     }
 
 
@@ -282,14 +290,16 @@ async def health():
         return {
             "status": "initializing",
             "mode": APP_MODE,
-            "terminal_ready": False
+            "terminal_ready": False,
+            "error_code": 0
         }
     
     return {
         "status": "healthy",
         "mode": APP_MODE,
         "terminal_ready": terminal.is_ready,
-        "reader_id": terminal.reader_id
+        "reader_id": terminal.reader_id,
+        "error_code": 0
     }
 
 
@@ -299,11 +309,46 @@ async def get_reader_status():
     if not terminal or not terminal.reader_id:
         return {
             "status": "error",
-            "message": "No Solo terminal configured"
+            "message": "No Solo terminal configured",
+            "error_code": 108010
         }
     
     status = await terminal.check_status()
     return status
+
+
+@app.get("/config")
+async def get_config():
+    """Return the current runtime configuration (API key excluded)"""
+    if not terminal:
+        return {"app": {"mode": APP_MODE}, "sumup": {}}
+    cfg = terminal.get_config()
+    cfg["app"]["mode"] = APP_MODE
+    return cfg
+
+
+@app.post("/config")
+async def update_config(new_config: dict):
+    """Update configuration at runtime (in-memory only, does not persist across restarts)"""
+    global APP_MODE, SUMUP_API_KEY, SUMUP_MERCHANT_CODE, SUMUP_READER_ID, config
+
+    if "app" in new_config:
+        config["app"].update(new_config["app"])
+        APP_MODE = config["app"].get("mode", "real")
+
+    if "sumup" in new_config:
+        config["sumup"].update(new_config["sumup"])
+        SUMUP_API_KEY = config["sumup"].get("api_key", SUMUP_API_KEY)
+        SUMUP_MERCHANT_CODE = config["sumup"].get("merchant_code", SUMUP_MERCHANT_CODE)
+        SUMUP_READER_ID = config["sumup"].get("reader_id", SUMUP_READER_ID)
+
+    if not terminal.update_config(config):
+        raise HTTPException(status_code=400, detail="Invalid configuration")
+
+    if not terminal.reader_id:
+        await terminal.discover_reader()
+
+    return {"success": True, "message": "Configuration updated"}
 
 
 if __name__ == "__main__":

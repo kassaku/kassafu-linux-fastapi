@@ -1,0 +1,19 @@
+[Unit]
+Description=KassaFu Payment Bridge Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+Group=YOUR_GROUPNAME
+WorkingDirectory=/home/YOUR_USERNAME/workspace/kassafu
+ExecStart=/home/YOUR_USERNAME/workspace/kassafu/venv/bin/python /home/YOUR_USERNAME/workspace/kassafu/kassafu.py --server
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
