@@ -56,6 +56,11 @@ pip install fastapi uvicorn
 
 # Configuration
 
+## Installation
+Create the ~/zhongcan directory.
+Run ./install.sh 
+To check if this works, see if port 8888 is used and call : sudo service kassafu status
+
 ## Runtime Configuration
 
 KassaFu exposes a runtime configuration API. All changes are **in-memory only** and do not persist across server restarts. To make permanent changes, edit `config.json` directly.
