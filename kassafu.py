@@ -283,6 +283,28 @@ async def get_payment_status(order_id: str):
     }
 
 
+@app.api_route("/payment/cancel", methods=["GET", "DELETE"])
+async def cancel_payment(order_id: str):
+    global terminal
+
+    if not terminal:
+        return JSONResponse(status_code=503, content={"status": "error", "message": "Terminal not ready", "error_code": 108008})
+
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Missing order_id query parameter")
+
+    result = await terminal.cancel_payment(order_id)
+
+    if terminal:
+        await terminal.clear_display()
+
+    if not result.get("success"):
+        return JSONResponse(status_code=404 if result.get("status") == "not_found" else 200, content=result)
+
+    logger.info(f"Payment for order {order_id} cancelled via API")
+    return result
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint"""

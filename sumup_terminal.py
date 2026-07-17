@@ -396,6 +396,49 @@ class SumUpTerminal:
             }
     
     
+    async def _terminate_reader_checkout(self) -> bool:
+        if not self.reader_id or not self.api_key:
+            logger.warning("Cannot terminate: no reader_id or api_key")
+            return False
+
+        url = f"https://api.sumup.com/v0.1/merchants/{self.merchant_code}/readers/{self.reader_id}/terminate"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, headers=headers, timeout=10)
+                if response.status_code in (200, 202, 204):
+                    logger.info(f"Terminate checkout returned HTTP {response.status_code}")
+                    return True
+                elif response.status_code == 422:
+                    logger.warning("Reader offline, cannot terminate checkout")
+                    return False
+                else:
+                    logger.warning(f"Terminate checkout returned unexpected HTTP {response.status_code}")
+                    return False
+            except Exception as e:
+                logger.error(f"Terminate checkout failed: {e}")
+                return False
+
+    async def cancel_payment(self, order_id: str) -> Dict:
+        if not self.current_order_id:
+            return {"success": False, "status": "not_found", "message": "No active payment", "error_code": 108002}
+        if self.current_order_id != order_id:
+            return {"success": False, "status": "not_found", "message": f"No payment for order {order_id}", "error_code": 108002}
+        if self.current_status in ("paid", "failed", "cancelled"):
+            return {"success": True, "status": self.current_status, "message": f"Already {self.current_status}", "error_code": 0}
+
+        terminated = await self._terminate_reader_checkout()
+        if terminated:
+            self.current_status = "cancelled"
+            logger.info(f"Payment for order {order_id} cancelled")
+            return {"success": True, "status": "cancelled", "message": "Payment cancelled", "error_code": 0}
+        else:
+            return {"success": False, "status": "failed", "message": "Failed to cancel on terminal", "error_code": 108011}
+
+    async def clear_display(self):
+        await self._terminate_reader_checkout()
+
     async def get_reader_state(self) -> str:
         """
         Get the current state of the reader (IDLE, WAITING_FOR_CARD, etc.)
