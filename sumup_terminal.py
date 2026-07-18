@@ -379,6 +379,7 @@ class SumUpTerminal:
         except asyncio.TimeoutError:
             logger.error(f"Payment timeout after {timeout_seconds} seconds")
             self.current_status = "failed"
+            self._log_status_update(order_id, self.current_transaction_id or "", "failed", f"Timeout after {timeout_seconds}s")
             return {
                 "success": False,
                 "status": "failed",
@@ -388,6 +389,7 @@ class SumUpTerminal:
         except Exception as e:
             logger.error(f"Payment failed: {e}")
             self.current_status = "failed"
+            self._log_status_update(order_id, self.current_transaction_id or "", "failed", str(e))
             return {
                 "success": False,
                 "status": "failed",
@@ -431,6 +433,7 @@ class SumUpTerminal:
         terminated = await self._terminate_reader_checkout()
         if terminated:
             self.current_status = "cancelled"
+            self._log_status_update(order_id, self.current_transaction_id or "", "cancelled")
             logger.info(f"Payment for order {order_id} cancelled")
             return {"success": True, "status": "cancelled", "message": "Payment cancelled", "error_code": 0}
         else:
@@ -484,6 +487,17 @@ class SumUpTerminal:
                 "status": "pending",
                 "transaction_id": transaction_id,
                 "duration_sec": (datetime.now() - start_time).total_seconds()
+            }) + '\n')
+
+    def _log_status_update(self, order_id: str, transaction_id: str, status: str, message: str = ""):
+        """Log a status update for a transaction"""
+        with open('transactions.log', 'a') as f:
+            f.write(json.dumps({
+                "timestamp": datetime.now().isoformat(),
+                "order_id": order_id,
+                "transaction_id": transaction_id,
+                "status": status,
+                "message": message
             }) + '\n')
     
     @property

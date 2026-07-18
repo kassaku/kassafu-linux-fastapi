@@ -186,6 +186,34 @@ async def pay(payment_data: dict):
     return result
 
 
+TRANSACTION_LOG = "transactions.log"
+
+
+@app.get("/payment/history")
+async def get_payment_history(limit: int = 20):
+    """Return the last N transactions from the transaction log"""
+    try:
+        with open(TRANSACTION_LOG, 'r') as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return {"items": [], "error_code": 0}
+
+    entries = []
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+            entries.append(entry)
+            if len(entries) >= limit:
+                break
+        except json.JSONDecodeError:
+            continue
+
+    return {"items": entries, "error_code": 0}
+
+
 @app.get("/payment/status")
 async def get_payment_status(order_id: str):
     """
@@ -233,6 +261,7 @@ async def get_payment_status(order_id: str):
         
         if transaction_status == "SUCCESSFUL":
             terminal.current_status = "paid"
+            terminal._log_status_update(order_id, terminal.current_transaction_id or "", "paid")
             logger.info(f"✅ Payment for order {order_id} completed")
             return {
                 "status": "paid",
@@ -245,6 +274,7 @@ async def get_payment_status(order_id: str):
         
         elif transaction_status in ["FAILED", "CANCELLED"]:
             terminal.current_status = "failed"
+            terminal._log_status_update(order_id, terminal.current_transaction_id or "", "failed")
             
             # Determine specific error message
             # Try to get more details from the transaction if available
