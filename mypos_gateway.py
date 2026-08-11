@@ -23,6 +23,7 @@ SOFTWARE.
 """
 
 import asyncio
+import json
 import logging
 import httpx
 from datetime import datetime, timezone, timedelta
@@ -82,19 +83,30 @@ class MyPOSGateway:
 
     async def _request_integration_token(self) -> str:
         url = f"{self.gateway_url}/api/v1/oauth/token"
-        async with self._new_client() as client:
-            response = await client.post(
-                url,
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": self.integration_client_id,
-                    "client_secret": self.integration_client_secret,
-                },
-                timeout=10,
-            )
+        try:
+            async with self._new_client() as client:
+                response = await client.post(
+                    url,
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": self.integration_client_id,
+                        "client_secret": self.integration_client_secret,
+                    },
+                    timeout=10,
+                )
+        except httpx.TimeoutException as e:
+            raise MyPOSGatewayError(None, f"Timeout: {e}") from e
+        except httpx.HTTPError as e:
+            raise MyPOSGatewayError(None, f"Transport error: {e}") from e
         if response.status_code in (200, 201):
-            data = response.json()
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                raise MyPOSGatewayError(response.status_code, f"Malformed token response: {e}") from e
+            access_token = data.get("access_token")
+            if not access_token:
+                raise MyPOSGatewayError(response.status_code, 'Token response missing "access_token"')
             expires_in = data.get("expires_in", 3600)
-            self._integration_token_expires = datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)
-            return data.get("access_token")
+            self._integration_token_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 60))
+            return access_token
         raise MyPOSGatewayError(response.status_code, f"Token request failed: HTTP {response.status_code}: {response.text[:200]}")
