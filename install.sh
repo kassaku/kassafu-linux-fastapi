@@ -22,8 +22,11 @@ mkdir -p "$INSTALL_DIR/venv"
 
 # --- Copy project files ---
 cp "$SCRIPT_DIR/kassafu.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/mypos_terminal.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/sumup_terminal.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/ccv.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/test_reader_status.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/test_real_payment.py" "$INSTALL_DIR/"
 
 if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
     cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"

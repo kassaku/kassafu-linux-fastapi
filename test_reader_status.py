@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-KassaFu Reader Status Test - Check if Solo terminal is online
+KassaFu Reader Status Test - Check if payment terminal is online
+Compatible payment terminals:
+  SumUp: Solo, Solo Lite, Air, 3G/4G readers
+  myPOS: Combo, Mini, Pro, Pad, Virtual
 
 Copyright (c) 2026 Houkes Horeca Applications
 
@@ -88,9 +91,9 @@ def test_reader_status():
             else:
                 print(f"❌ [{code}] READER IS OFFLINE")
                 print("   Please check:")
-                print("   1. Is the Solo terminal powered on?")
-                print("   2. Does it have internet connection (Wi-Fi/Cellular)?")
-                print("   3. Is it properly paired with your SumUp account?")
+    print("   1. Is the payment terminal powered on?")
+    print("   2. Does it have internet connection (Wi-Fi/Cellular)?")
+    print("   3. Is it properly paired with your account?")
                 return False
                 
         elif response.status_code == 503:

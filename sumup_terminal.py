@@ -63,6 +63,8 @@ class SumUpTerminal:
         self.current_currency = None
         self.current_status = None
         self.current_created_at = None
+        self.current_card_scheme = None
+        self.current_card_last_4 = None
     
     def init(self, config: Dict) -> bool:
         """
@@ -153,6 +155,8 @@ class SumUpTerminal:
         self.current_currency = None
         self.current_status = None
         self.current_created_at = None
+        self.current_card_scheme = None
+        self.current_card_last_4 = None
         logger.debug("Cleared current payment")
     
     async def discover_reader(self) -> bool:
@@ -261,6 +265,9 @@ class SumUpTerminal:
                         logger.info(f"Transaction {transaction_id} status: {status}")
                         
                         if status == "SUCCESSFUL":
+                            card = data.get("card", {})
+                            self.current_card_scheme = card.get("type")
+                            self.current_card_last_4 = card.get("last_4_digits")
                             return "SUCCESSFUL"
                         elif status in ["FAILED", "CANCELLED"]:
                             return status
@@ -275,6 +282,9 @@ class SumUpTerminal:
                         logger.info(f"Transaction {transaction_id} status: {status}")
                         
                         if status == "SUCCESSFUL":
+                            card = transaction.get("card", {})
+                            self.current_card_scheme = card.get("type")
+                            self.current_card_last_4 = card.get("last_4_digits")
                             return "SUCCESSFUL"
                         elif status in ["FAILED", "CANCELLED"]:
                             return status
@@ -486,6 +496,8 @@ class SumUpTerminal:
                 "currency": currency,
                 "status": "pending",
                 "transaction_id": transaction_id,
+                "card_scheme": self.current_card_scheme,
+                "card_last_4": self.current_card_last_4,
                 "duration_sec": (datetime.now() - start_time).total_seconds()
             }) + '\n')
 
@@ -496,8 +508,12 @@ class SumUpTerminal:
                 "timestamp": datetime.now().isoformat(),
                 "order_id": order_id,
                 "transaction_id": transaction_id,
+                "amount_cents": self.current_amount_cents,
+                "currency": self.current_currency,
                 "status": status,
-                "message": message
+                "message": message,
+                "card_scheme": self.current_card_scheme,
+                "card_last_4": self.current_card_last_4
             }) + '\n')
     
     @property

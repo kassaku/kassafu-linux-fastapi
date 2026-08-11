@@ -35,27 +35,30 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from sumup_terminal import SumUpTerminal
+from mypos_terminal import MyPOSTerminal
 
-# Configuration file
 CONFIG_FILE = "config.json"
 
-# Load configuration from JSON file
+TERMINAL_CLASSES = {
+    "sumup": SumUpTerminal,
+    "mypos": MyPOSTerminal,
+}
+
 def load_config_from_file(config_path: str = CONFIG_FILE) -> dict:
     """Load configuration from JSON file"""
     try:
         with open(config_path, 'r') as f:
             config = json.load(f)
-        logger.info(f"✅ Loaded configuration from {config_path}")
+        logger.info(f"Loaded configuration from {config_path}")
         return config
     except FileNotFoundError:
-        logger.error(f"❌ Config file {config_path} not found")
-        logger.error(f"   Please create {config_path} with your SumUp credentials")
+        logger.error(f"Config file {config_path} not found")
+        logger.error(f"   Please create {config_path} with your terminal credentials")
         sys.exit(1)
     except json.JSONDecodeError as e:
-        logger.error(f"❌ Invalid JSON in {config_path}: {e}")
+        logger.error(f"Invalid JSON in {config_path}: {e}")
         sys.exit(1)
 
-# Logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -66,60 +69,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load configuration
 config = load_config_from_file()
 
-# Extract configuration values
-APP_MODE = config.get("app", {}).get("mode", "real")
-SUMUP_API_KEY = config.get("sumup", {}).get("api_key", "")
-SUMUP_MERCHANT_CODE = config.get("sumup", {}).get("merchant_code", "")
-SUMUP_READER_ID = config.get("sumup", {}).get("reader_id", "")
+TERMINAL_MODE = config.get("app", {}).get("mode", "sumup")
+TERMINAL_TYPE = config.get("app", {}).get("terminal_type", TERMINAL_MODE)
 PORT = 8888
 
-# Global variables
-terminal: Optional[SumUpTerminal] = None
+terminal: Optional[object] = None
 payment_queue = asyncio.Queue()
 active_payment = False
 
 
+def _get_terminal_class(terminal_type: str):
+    t = terminal_type.lower()
+    cls = TERMINAL_CLASSES.get(t)
+    if not cls:
+        logger.warning(f"Unknown terminal type '{terminal_type}', falling back to sumup")
+        cls = SumUpTerminal
+    return cls
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    global terminal
-    
-    logger.info(f"KassaFu starting in {APP_MODE} mode on port {PORT}")
-    
-    # Validate configuration
-    if not SUMUP_API_KEY:
-        logger.error("Missing sumup.api_key in configuration")
-        logger.error("Please edit config.json and add your SumUp API key")
-        raise RuntimeError("SUMUP_API_KEY is required")
-    
-    if not SUMUP_MERCHANT_CODE:
-        logger.error("Missing sumup.merchant_code in configuration")
-        logger.error("Please edit config.json and add your merchant code")
-        raise RuntimeError("SUMUP_MERCHANT_CODE is required")
-    
-    # Initialize terminal (no constructor parameters!)
-    terminal = SumUpTerminal()
-    
-    # Initialize with configuration
+    global terminal, TERMINAL_TYPE
+
+    logger.info(f"KassaFu starting with terminal type '{TERMINAL_TYPE}' on port {PORT}")
+
+    terminal_cls = _get_terminal_class(TERMINAL_TYPE)
+    terminal = terminal_cls()
+
     if not terminal.init(config):
-        logger.error("Failed to initialize terminal with configuration")
-        raise RuntimeError("Terminal initialization failed")
-    
-    # Discover reader if not manually specified
-    if not terminal.reader_id:
-        logger.info("No reader ID provided, discovering...")
-        await terminal.discover_reader()
+        logger.error(f"Failed to initialize {TERMINAL_TYPE} terminal with configuration")
+        raise RuntimeError(f"{TERMINAL_TYPE} terminal initialization failed")
+
+    if hasattr(terminal, 'discover_reader') and hasattr(terminal, 'reader_id'):
         if not terminal.reader_id:
-            logger.warning("⚠️ No Solo terminal found. Please check your SumUp account.")
-    
-    # Start payment queue processor
+            logger.info("No reader ID provided, discovering...")
+            await terminal.discover_reader()
+            if not terminal.reader_id:
+                logger.warning(f"No {TERMINAL_TYPE} terminal found. Please check your configuration.")
+    elif hasattr(terminal, 'terminal_id'):
+        if not terminal.terminal_id:
+            logger.info("No terminal ID provided, discovering...")
+            await terminal.discover_reader()
+
     asyncio.create_task(process_payment_queue())
-    
+
     yield
-    
+
     logger.info("KassaFu shutting down")
 
 
@@ -129,7 +126,7 @@ app = FastAPI(lifespan=lifespan)
 async def process_payment_queue():
     """Process queued payments one at a time"""
     global active_payment, terminal
-    
+
     while True:
         payment_data = await payment_queue.get()
         active_payment = True
@@ -151,18 +148,15 @@ async def process_payment_queue():
 async def pay(payment_data: dict):
     """Accept payment request from POS"""
     global active_payment, terminal
-    
-    # Validate required fields
+
     required = ['order_id', 'amount_cents', 'currency']
     for field in required:
         if field not in payment_data:
             raise HTTPException(status_code=400, detail=f"Missing field: {field}")
-    
-    # Check if terminal is ready
+
     if not terminal or not terminal.is_ready:
         raise HTTPException(status_code=503, detail="Terminal not ready")
-    
-    # Queue if active payment in progress
+
     if active_payment:
         logger.info(f"Queueing payment for {payment_data['order_id']}")
         await payment_queue.put(payment_data)
@@ -175,14 +169,13 @@ async def pay(payment_data: dict):
                 "error_code": 108012
             }
         )
-    
-    # Process payment immediately
+
     result = await terminal.process_payment(
         order_id=payment_data['order_id'],
         amount_cents=payment_data['amount_cents'],
         currency=payment_data.get('currency', 'EUR')
     )
-    
+
     return result
 
 
@@ -221,69 +214,64 @@ async def get_payment_status(order_id: str):
     POS calls this every few seconds to check if payment is complete.
     """
     global terminal
-    
+
     if not terminal:
         return JSONResponse(
             status_code=503,
             content={"status": "error", "message": "Terminal not ready", "error_code": 108008}
         )
-    
-    # Check if terminal has a current payment
+
     if not terminal.current_order_id:
         return {
             "status": "idle",
             "message": "No active payment",
             "error_code": 0
         }
-    
-    # If this order_id doesn't match current payment
+
     if terminal.current_order_id != order_id:
         return {
             "status": "not_found",
             "message": f"No payment found for order {order_id}",
             "error_code": 108002
         }
-    
-    # If payment already completed or failed, return cached status
+
     if terminal.current_status in ["paid", "failed", "cancelled"]:
         return {
             "status": terminal.current_status,
             "order_id": terminal.current_order_id,
             "amount": terminal.current_amount_cents / 100,
             "currency": terminal.current_currency,
+            "card_scheme": terminal.current_card_scheme,
+            "card_last_4": terminal.current_card_last_4,
             "message": "Payment completed" if terminal.current_status == "paid" else "Payment failed",
             "error_code": 0 if terminal.current_status == "paid" else 108009
         }
-    
-    # Check transaction status with SumUp API
+
     if terminal.current_transaction_id:
         transaction_status = await terminal.get_transaction_status(terminal.current_transaction_id)
-        
+
         if transaction_status == "SUCCESSFUL":
             terminal.current_status = "paid"
             terminal._log_status_update(order_id, terminal.current_transaction_id or "", "paid")
-            logger.info(f"✅ Payment for order {order_id} completed")
+            logger.info(f"Payment for order {order_id} completed")
             return {
                 "status": "paid",
                 "order_id": terminal.current_order_id,
                 "amount": terminal.current_amount_cents / 100,
                 "currency": terminal.current_currency,
+                "card_scheme": terminal.current_card_scheme,
+                "card_last_4": terminal.current_card_last_4,
                 "message": "Payment completed successfully",
                 "error_code": 0
             }
-        
+
         elif transaction_status in ["FAILED", "CANCELLED"]:
             terminal.current_status = "failed"
             terminal._log_status_update(order_id, terminal.current_transaction_id or "", "failed")
-            
-            # Determine specific error message
-            # Try to get more details from the transaction if available
+
             error_message = "Card rejected - please try another payment method"
-            
-            # You can enhance this by checking the actual API response
-            # For now, use a generic message
-            logger.warning(f"❌ Payment for order {order_id} {transaction_status}")
-            
+            logger.warning(f"Payment for order {order_id} {transaction_status}")
+
             return {
                 "status": "failed",
                 "order_id": terminal.current_order_id,
@@ -292,9 +280,8 @@ async def get_payment_status(order_id: str):
                 "message": error_message,
                 "error_code": 108009
             }
-        
+
         else:
-            # Still pending
             return {
                 "status": "pending",
                 "order_id": terminal.current_order_id,
@@ -302,8 +289,7 @@ async def get_payment_status(order_id: str):
                 "currency": terminal.current_currency,
                 "error_code": 0
             }
-    
-    # No transaction ID yet - still pending
+
     return {
         "status": "pending",
         "order_id": terminal.current_order_id,
@@ -325,7 +311,7 @@ async def cancel_payment(order_id: str):
 
     result = await terminal.cancel_payment(order_id)
 
-    if terminal:
+    if terminal and hasattr(terminal, 'clear_display'):
         await terminal.clear_display()
 
     if not result.get("success"):
@@ -341,30 +327,37 @@ async def health():
     if not terminal:
         return {
             "status": "initializing",
-            "mode": APP_MODE,
+            "mode": TERMINAL_TYPE,
             "terminal_ready": False,
             "error_code": 0
         }
-    
+
     return {
         "status": "healthy",
-        "mode": APP_MODE,
+        "mode": TERMINAL_TYPE,
         "terminal_ready": terminal.is_ready,
-        "reader_id": terminal.reader_id,
         "error_code": 0
     }
 
 
 @app.get("/reader/status")
 async def get_reader_status():
-    """Check if the Solo terminal is online and ready"""
-    if not terminal or not terminal.reader_id:
+    """Check if the terminal is online and ready"""
+    if not terminal:
         return {
             "status": "error",
-            "message": "No Solo terminal configured",
+            "message": "No terminal configured",
             "error_code": 108010
         }
-    
+
+    reader_id = getattr(terminal, 'reader_id', None) or getattr(terminal, 'terminal_id', None)
+    if not reader_id:
+        return {
+            "status": "error",
+            "message": "No terminal configured",
+            "error_code": 108010
+        }
+
     status = await terminal.check_status()
     return status
 
@@ -373,53 +366,58 @@ async def get_reader_status():
 async def get_config():
     """Return the current runtime configuration (API key excluded)"""
     if not terminal:
-        return {"app": {"mode": APP_MODE}, "sumup": {}}
+        return {"app": {"mode": TERMINAL_TYPE}}
     cfg = terminal.get_config()
-    cfg["app"]["mode"] = APP_MODE
+    cfg["app"]["mode"] = TERMINAL_TYPE
     return cfg
 
 
 @app.post("/config")
 async def update_config(new_config: dict):
     """Update configuration at runtime (in-memory only, does not persist across restarts)"""
-    global APP_MODE, SUMUP_API_KEY, SUMUP_MERCHANT_CODE, SUMUP_READER_ID, config
+    global config
 
     if "app" in new_config:
         config["app"].update(new_config["app"])
-        APP_MODE = config["app"].get("mode", "real")
 
-    if "sumup" in new_config:
-        config["sumup"].update(new_config["sumup"])
-        SUMUP_API_KEY = config["sumup"].get("api_key", SUMUP_API_KEY)
-        SUMUP_MERCHANT_CODE = config["sumup"].get("merchant_code", SUMUP_MERCHANT_CODE)
-        SUMUP_READER_ID = config["sumup"].get("reader_id", SUMUP_READER_ID)
+    term_type = config.get("app", {}).get("terminal_type") or config.get("app", {}).get("mode", "sumup")
+    term_cls = _get_terminal_class(term_type)
+
+    term_config = {}
+    for key in term_cls.__name__.lower().replace("terminal", ""):
+        pass
+    for section in TERMINAL_CLASSES:
+        if section in new_config:
+            config.setdefault(section, {}).update(new_config[section])
 
     if not terminal.update_config(config):
         raise HTTPException(status_code=400, detail="Invalid configuration")
 
-    if not terminal.reader_id:
-        await terminal.discover_reader()
+    if hasattr(terminal, 'reader_id') and not terminal.reader_id:
+        if hasattr(terminal, 'discover_reader'):
+            await terminal.discover_reader()
+    elif hasattr(terminal, 'terminal_id') and not terminal.terminal_id:
+        if hasattr(terminal, 'discover_reader'):
+            await terminal.discover_reader()
 
     return {"success": True, "message": "Configuration updated"}
 
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="KassaFu Payment Bridge")
     parser.add_argument("--server", action="store_true", help="Run in server mode")
     parser.add_argument("--config", type=str, default="config.json", help="Configuration file path")
     parser.add_argument("--port", type=int, help="Override port (default: 8888)")
     args = parser.parse_args()
-    
-    # Update CONFIG_FILE if specified
+
     if args.config != "config.json":
         CONFIG_FILE = args.config
         config = load_config_from_file(CONFIG_FILE)
-    
-    # Override port if specified
+
     port = args.port if args.port else 8888
-    
+
     if args.server:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
     else:
