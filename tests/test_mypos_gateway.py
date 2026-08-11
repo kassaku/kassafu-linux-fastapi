@@ -81,5 +81,48 @@ class IntegrationTokenTests(unittest.TestCase):
         self.assertEqual(asyncio.run(scenario()), 500)
 
 
+class SessionTests(unittest.TestCase):
+    def test_fetches_session_with_merchant_credentials(self):
+        async def scenario():
+            seen = []
+
+            def handler(request):
+                seen.append(request.url.path)
+                if request.url.path == "/api/v1/oauth/token":
+                    return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                self.assertEqual(request.url.path, "/api/v1/auth/session")
+                self.assertEqual(request.headers["authorization"], "Bearer tok_integration")
+                body = request.read().decode()
+                self.assertIn('"client_id": "cli_merchant"', body)
+                self.assertIn('"client_secret": "sec_merchant"', body)
+                return httpx.Response(200, json={"session": "session_abc", "expires_in": 360})
+
+            gateway = make_gateway(handler)
+            session = await gateway._get_session()
+            return session, len(seen)
+
+        session, n = asyncio.run(scenario())
+        self.assertEqual(session, "session_abc")
+        self.assertEqual(n, 2)
+
+    def test_session_cached(self):
+        async def scenario():
+            calls = []
+
+            def handler(request):
+                calls.append(request.url.path)
+                if request.url.path == "/api/v1/oauth/token":
+                    return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                return httpx.Response(200, json={"session": "session_abc", "expires_in": 360})
+
+            gateway = make_gateway(handler)
+            await gateway._get_session()
+            await gateway._get_session()
+            return calls
+
+        calls = asyncio.run(scenario())
+        self.assertEqual(calls.count("/api/v1/auth/session"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

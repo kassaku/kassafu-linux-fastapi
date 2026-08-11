@@ -110,3 +110,44 @@ class MyPOSGateway:
             self._integration_token_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 60))
             return access_token
         raise MyPOSGatewayError(response.status_code, f"Token request failed: HTTP {response.status_code}: {response.text[:200]}")
+
+    async def _get_session(self) -> str:
+        token = await self._get_integration_token()
+        async with self._session_lock:
+            now = datetime.now(timezone.utc)
+            if self._session and self._session_expires and now < self._session_expires:
+                return self._session
+            session = await self._request_session(token)
+            self._session = session
+            return session
+
+    async def _request_session(self, token: str) -> str:
+        url = f"{self.gateway_url}/api/v1/auth/session"
+        payload = {
+            "client_id": self.merchant_client_id,
+            "client_secret": self.merchant_client_secret,
+        }
+        try:
+            async with self._new_client() as client:
+                response = await client.post(
+                    url,
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    content=json.dumps(payload),
+                    timeout=10,
+                )
+        except httpx.TimeoutException as e:
+            raise MyPOSGatewayError(None, f"Timeout: {e}") from e
+        except httpx.HTTPError as e:
+            raise MyPOSGatewayError(None, f"Transport error: {e}") from e
+        if response.status_code in (200, 201):
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                raise MyPOSGatewayError(response.status_code, f"Malformed session response: {e}") from e
+            session = data.get("session")
+            if not session:
+                raise MyPOSGatewayError(response.status_code, 'Session response missing "session"')
+            expires_in = data.get("expires_in", 360)
+            self._session_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 30))
+            return session
+        raise MyPOSGatewayError(response.status_code, f"Session request failed: HTTP {response.status_code}: {response.text[:200]}")
