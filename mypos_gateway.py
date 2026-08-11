@@ -151,3 +151,66 @@ class MyPOSGateway:
             self._session_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 30))
             return session
         raise MyPOSGatewayError(response.status_code, f"Session request failed: HTTP {response.status_code}: {response.text[:200]}")
+
+    def _invalidate_tokens(self):
+        self._integration_token = None
+        self._integration_token_expires = None
+        self._session = None
+        self._session_expires = None
+
+    async def request(self, method: str, path: str, body: dict = None, params: dict = None) -> dict:
+        for attempt in range(2):
+            token = await self._get_integration_token()
+            session = await self._get_session()
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "X-Session": session,
+                "X-Partner-Id": self.partner_id,
+                "X-Application-Id": self.application_id,
+                "Content-Type": "application/json; x-api-version=1",
+            }
+            url = f"{self.gateway_url}{path}"
+            kwargs = {}
+            if body is not None:
+                kwargs["content"] = json.dumps(body)
+            try:
+                async with self._new_client() as client:
+                    response = await client.request(
+                        method, url, headers=headers, params=params, timeout=15, **kwargs
+                    )
+            except httpx.TimeoutException as e:
+                raise MyPOSGatewayError(None, f"Timeout: {e}") from e
+            except httpx.HTTPError as e:
+                raise MyPOSGatewayError(None, f"Transport error: {e}") from e
+
+            if response.status_code == 401 and attempt == 0:
+                self._invalidate_tokens()
+                continue
+            if response.status_code >= 400:
+                raise MyPOSGatewayError(response.status_code, response.text[:200])
+            if not response.content:
+                return {}
+            return response.json()
+        raise MyPOSGatewayError(401, "Unauthorized after token refresh")
+
+    async def get_terminals(self, page: int = 1, size: int = 20, terminal_id: str = None, serial_number: str = None, model: str = None) -> dict:
+        params = {"page": page, "size": size}
+        if terminal_id:
+            params["terminal_id"] = terminal_id
+        if serial_number:
+            params["serial_number"] = serial_number
+        if model:
+            params["model"] = model
+        return await self.request("GET", "/pos/v1/terminals", params=params)
+
+    async def get_terminal(self, terminal_id: str) -> dict:
+        return await self.request("GET", f"/pos/v1/terminals/{terminal_id}")
+
+    async def create_payment(self, payload: dict) -> dict:
+        return await self.request("POST", "/epos/v1/payments", body=payload)
+
+    async def get_payment(self, payment_id: str) -> dict:
+        return await self.request("GET", f"/epos/v1/payments/{payment_id}")
+
+    async def cancel_payment(self, payment_id: str) -> dict:
+        return await self.request("DELETE", f"/epos/v1/payments/{payment_id}")
