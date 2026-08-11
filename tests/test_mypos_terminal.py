@@ -25,6 +25,7 @@ class FakeGateway:
         self.payment_requests = []
         self.cancel_requests = []
         self.create_payment_error = None
+        self.payment_error = None
 
     async def get_terminals(self, **kwargs):
         return self.terminals_result
@@ -39,6 +40,8 @@ class FakeGateway:
         return {"payment_id": "pay_123", "status": "InProgress"}
 
     async def get_payment(self, payment_id):
+        if self.payment_error:
+            raise self.payment_error
         return self.payment_result
 
     async def cancel_payment(self, payment_id):
@@ -61,7 +64,12 @@ class InitTests(unittest.TestCase):
 
     def test_init_fails_without_merchant_credentials(self):
         t = MyPOSTerminal()
-        config = {"mypos": {"gateway_url": "https://demo-api-gateway.mypos.com", "integration": {"client_id": "x", "client_secret": "y"}}}
+        config = {"mypos": {
+            "gateway_url": "https://demo-api-gateway.mypos.com",
+            "integration": {"client_id": "x", "client_secret": "y"},
+            "partner_id": "mps-p-test",
+            "application_id": "mps-app-test",
+        }}
         self.assertFalse(t.init(config))
 
     def test_init_ready_with_terminal_id(self):
@@ -107,6 +115,15 @@ class TransactionStatusTests(unittest.TestCase):
         asyncio.run(scenario())
         self.assertEqual(t.current_card_scheme, "VISA")
         self.assertEqual(t.current_card_last_4, "6693")
+
+    def test_gateway_error_returns_pending(self):
+        t = make_terminal()
+        t.gateway.payment_error = MyPOSGatewayError(404, "not found")
+
+        async def scenario():
+            return await t.get_transaction_status("pay_1")
+
+        self.assertEqual(asyncio.run(scenario()), "PENDING")
 
 
 if __name__ == "__main__":
