@@ -177,3 +177,37 @@ class MyPOSTerminal:
     @property
     def is_ready(self) -> bool:
         return self._is_ready and self.terminal_id is not None
+
+    async def discover_reader(self) -> bool:
+        try:
+            result = await self.gateway.get_terminals()
+            terminals = result.get("terminals", [])
+            if terminals:
+                self.terminal_id = terminals[0].get("terminal_id")
+                self._is_ready = True
+                logger.info(f"Discovered myPOS terminal: {self.terminal_id}")
+                return True
+            logger.warning("No myPOS terminals found")
+            return False
+        except MyPOSGatewayError as e:
+            logger.warning(f"Failed to discover terminals: {e.detail}")
+            return False
+
+    async def check_status(self) -> Dict:
+        if not self.terminal_id:
+            return {"online": False, "ready": False, "error": "No terminal ID configured", "error_code": 108010}
+        try:
+            data = await self.gateway.get_terminal(self.terminal_id)
+            is_active = data.get("status") == "Active"
+            return {
+                "online": is_active,
+                "ready": is_active,
+                "state": data.get("status"),
+                "terminal_id": self.terminal_id,
+                "terminal_name": data.get("terminal_name"),
+                "model": data.get("model"),
+                "serial_number": data.get("serial_number"),
+                "device_currency": data.get("device_currency"),
+            }
+        except MyPOSGatewayError as e:
+            return {"online": False, "ready": False, "error": e.detail, "error_code": self._map_error_code(e.status)}

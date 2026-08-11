@@ -126,5 +126,45 @@ class TransactionStatusTests(unittest.TestCase):
         self.assertEqual(asyncio.run(scenario()), "PENDING")
 
 
+class DiscoverTests(unittest.TestCase):
+    def test_discover_sets_first_terminal(self):
+        t = MyPOSTerminal()
+        t.init({**CONFIG, "mypos": {**CONFIG["mypos"], "terminal_id": None}})
+        t.gateway = FakeGateway()
+        self.assertFalse(t.is_ready)
+
+        async def scenario():
+            return await t.discover_reader()
+
+        self.assertTrue(asyncio.run(scenario()))
+        self.assertEqual(t.terminal_id, "80026232")
+        self.assertTrue(t.is_ready)
+
+
+class CheckStatusTests(unittest.TestCase):
+    def test_active_terminal_is_online(self):
+        t = make_terminal()
+
+        async def scenario():
+            return await t.check_status()
+
+        status = asyncio.run(scenario())
+        self.assertTrue(status["online"])
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["state"], "Active")
+        self.assertEqual(status["device_currency"], "EUR")
+
+    def test_missing_terminal_id(self):
+        t = MyPOSTerminal()
+        t.init({**CONFIG, "mypos": {**CONFIG["mypos"], "terminal_id": None}})
+
+        async def scenario():
+            return await t.check_status()
+
+        status = asyncio.run(scenario())
+        self.assertEqual(status["error_code"], 108010)
+        self.assertFalse(status["online"])
+
+
 if __name__ == "__main__":
     unittest.main()
