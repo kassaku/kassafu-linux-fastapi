@@ -219,5 +219,56 @@ class ProcessPaymentTests(unittest.TestCase):
         self.assertEqual(result["error_code"], 108007)
 
 
+class CancelPaymentTests(unittest.TestCase):
+    def test_cancels_active_payment_via_delete(self):
+        t = make_terminal()
+
+        async def scenario():
+            await t.process_payment("ORD-1", 100, "EUR")
+            return await t.cancel_payment("ORD-1")
+
+        result = asyncio.run(scenario())
+        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], "cancelled")
+        self.assertEqual(t.gateway.cancel_requests, ["pay_123"])
+
+    def test_no_active_payment(self):
+        t = make_terminal()
+
+        async def scenario():
+            return await t.cancel_payment("ORD-1")
+
+        result = asyncio.run(scenario())
+        self.assertEqual(result["status"], "not_found")
+        self.assertFalse(result["success"])
+
+    def test_wrong_order_id(self):
+        t = make_terminal()
+
+        async def scenario():
+            await t.process_payment("ORD-1", 100, "EUR")
+            return await t.cancel_payment("ORD-2")
+
+        result = asyncio.run(scenario())
+        self.assertEqual(result["status"], "not_found")
+
+
+class ClearDisplayTests(unittest.TestCase):
+    def test_clear_display_is_noop(self):
+        t = make_terminal()
+
+        async def scenario():
+            await t.clear_display()
+
+        asyncio.run(scenario())  # must not raise
+
+
+class ReadyTests(unittest.TestCase):
+    def test_is_ready_false_without_terminal(self):
+        t = MyPOSTerminal()
+        t.init({**CONFIG, "mypos": {**CONFIG["mypos"], "terminal_id": None}})
+        self.assertFalse(t.is_ready)
+
+
 if __name__ == "__main__":
     unittest.main()

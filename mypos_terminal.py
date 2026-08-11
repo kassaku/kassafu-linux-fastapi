@@ -286,3 +286,27 @@ class MyPOSTerminal:
                 "card_scheme": self.current_card_scheme,
                 "card_last_4": self.current_card_last_4
             }) + '\n')
+
+    async def cancel_payment(self, order_id: str) -> Dict:
+        if not self.current_order_id:
+            return {"success": False, "status": "not_found", "message": "No active payment", "error_code": 108002}
+        if self.current_order_id != order_id:
+            return {"success": False, "status": "not_found", "message": f"No payment for order {order_id}", "error_code": 108002}
+        if self.current_status in ("paid", "failed", "cancelled"):
+            return {"success": True, "status": self.current_status, "message": f"Already {self.current_status}", "error_code": 0}
+
+        if self.current_transaction_id:
+            try:
+                await self.gateway.cancel_payment(self.current_transaction_id)
+                self.current_status = "cancelled"
+                self._log_status_update(order_id, self.current_transaction_id, "cancelled")
+                logger.info(f"myPOS payment for order {order_id} cancelled")
+                return {"success": True, "status": "cancelled", "message": "Payment cancelled", "error_code": 0}
+            except MyPOSGatewayError as e:
+                logger.warning(f"Cancel failed on gateway: {e.detail}")
+
+        self.current_status = "cancelled"
+        return {"success": True, "status": "cancelled", "message": "Payment cancelled (local)", "error_code": 0}
+
+    async def clear_display(self):
+        pass
