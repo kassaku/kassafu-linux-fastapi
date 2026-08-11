@@ -166,5 +166,58 @@ class CheckStatusTests(unittest.TestCase):
         self.assertFalse(status["online"])
 
 
+class ProcessPaymentTests(unittest.TestCase):
+    def test_builds_snake_case_payload(self):
+        t = make_terminal()
+
+        async def scenario():
+            return await t.process_payment("ORD-1", 1500, "EUR")
+
+        result = asyncio.run(scenario())
+        payload = t.gateway.payment_requests[0]
+        self.assertEqual(payload["reference_number"], "ORD-1")
+        self.assertEqual(payload["amount"], {"value": 1500, "currency_code": "EUR"})
+        self.assertEqual(payload["terminal_id"], "80026232")
+        self.assertEqual(payload["app_name"], "KassaFu")
+        self.assertEqual(payload["app_version"], "1.0.0")
+        self.assertNotIn("operator_code", payload)
+        self.assertTrue(result["success"])
+        self.assertEqual(result["transaction_id"], "pay_123")
+        self.assertEqual(result["status"], "pending")
+        self.assertEqual(t.current_transaction_id, "pay_123")
+
+    def test_includes_operator_code_when_configured(self):
+        t = make_terminal()
+        t.mypos_config["operator_code"] = "0123"
+
+        async def scenario():
+            return await t.process_payment("ORD-2", 100, "EUR")
+
+        asyncio.run(scenario())
+        self.assertEqual(t.gateway.payment_requests[0]["operator_code"], "0123")
+
+    def test_missing_terminal_fails(self):
+        t = MyPOSTerminal()
+        t.init({**CONFIG, "mypos": {**CONFIG["mypos"], "terminal_id": None}})
+
+        async def scenario():
+            return await t.process_payment("ORD-1", 100, "EUR")
+
+        result = asyncio.run(scenario())
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_code"], 108010)
+
+    def test_gateway_error_maps_error_code(self):
+        t = make_terminal()
+        t.gateway.create_payment_error = MyPOSGatewayError(400, "bad request")
+
+        async def scenario():
+            return await t.process_payment("ORD-1", 100, "EUR")
+
+        result = asyncio.run(scenario())
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_code"], 108007)
+
+
 if __name__ == "__main__":
     unittest.main()

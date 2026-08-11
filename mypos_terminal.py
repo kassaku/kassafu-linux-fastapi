@@ -211,3 +211,78 @@ class MyPOSTerminal:
             }
         except MyPOSGatewayError as e:
             return {"online": False, "ready": False, "error": e.detail, "error_code": self._map_error_code(e.status)}
+
+    async def process_payment(self, order_id: str, amount_cents: int, currency: str = "EUR") -> Dict:
+        start_time = datetime.now()
+
+        self.current_order_id = order_id
+        self.current_amount_cents = amount_cents
+        self.current_currency = currency
+        self.current_status = "pending"
+        self.current_created_at = start_time
+
+        if not self.terminal_id:
+            self.clear_current_payment()
+            return {"success": False, "status": "failed", "message": "No myPOS terminal configured", "error_code": 108010}
+
+        logger.info(f"Processing myPOS payment for order {order_id}: {amount_cents/100} {currency}")
+
+        payload = {
+            "reference_number": order_id,
+            "amount": {"value": amount_cents, "currency_code": currency},
+            "terminal_id": self.terminal_id,
+            "app_name": self.app_config.get("name", "KassaFu"),
+            "app_version": "1.0.0",
+        }
+        operator_code = self.mypos_config.get("operator_code")
+        if operator_code:
+            payload["operator_code"] = operator_code
+
+        try:
+            data = await self.gateway.create_payment(payload)
+            payment_id = data.get("payment_id")
+            self.current_transaction_id = payment_id
+            logger.info(f"myPOS payment initiated: {payment_id}")
+            self._log_transaction(order_id, amount_cents, currency, payment_id or "", start_time)
+            return {
+                "success": True,
+                "transaction_id": payment_id,
+                "status": "pending",
+                "message": "Payment initiated on myPOS terminal",
+                "error_code": 0,
+            }
+        except MyPOSGatewayError as e:
+            self.current_status = "failed"
+            self._log_status_update(order_id, self.current_transaction_id or "", "failed", e.detail)
+            return {
+                "success": False,
+                "status": "failed",
+                "message": e.detail,
+                "error_code": self._map_error_code(e.status),
+            }
+
+    def _log_transaction(self, order_id: str, amount_cents: int, currency: str, transaction_id: str, start_time: datetime):
+        with open('transactions.log', 'a') as f:
+            f.write(json.dumps({
+                "timestamp": datetime.now().isoformat(),
+                "order_id": order_id,
+                "amount_cents": amount_cents,
+                "currency": currency,
+                "status": "pending",
+                "transaction_id": transaction_id,
+                "card_scheme": self.current_card_scheme,
+                "card_last_4": self.current_card_last_4,
+                "duration_sec": (datetime.now() - start_time).total_seconds()
+            }) + '\n')
+
+    def _log_status_update(self, order_id: str, transaction_id: str, status: str, message: str = ""):
+        with open('transactions.log', 'a') as f:
+            f.write(json.dumps({
+                "timestamp": datetime.now().isoformat(),
+                "order_id": order_id,
+                "transaction_id": transaction_id,
+                "status": status,
+                "message": message,
+                "card_scheme": self.current_card_scheme,
+                "card_last_4": self.current_card_last_4
+            }) + '\n')
