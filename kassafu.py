@@ -108,6 +108,34 @@ def _resolve_terminal_type(cfg: dict) -> str:
     return "sumup"
 
 
+def _apply_runtime_config(new_config: dict):
+    """Replace runtime config and hot-swap the terminal implementation.
+
+    Returns (success, detail): detail is the active terminal type on success,
+    an error message on failure. Globals are only mutated on success.
+    """
+    global config, terminal, TERMINAL_TYPE
+
+    if not isinstance(new_config, dict):
+        return False, "Configuration must be a JSON object"
+
+    term_type = _resolve_terminal_type(new_config)
+    term_cls = _get_terminal_class(term_type)
+
+    candidate = term_cls()
+    if not candidate.init(new_config):
+        detail = f"Failed to initialize {term_type} terminal with supplied configuration"
+        logger.error(detail)
+        return False, detail
+
+    config = new_config
+    TERMINAL_TYPE = term_type
+    terminal = candidate
+
+    logger.info(f"Terminal switched to '{term_type}' via runtime configuration")
+    return True, term_type
+
+
 TERMINAL_TYPE = _resolve_terminal_type(config)
 
 
