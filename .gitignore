@@ -151,6 +151,8 @@ activemq-data/
 .env
 .envrc
 config.json
+config.sumup.json
+config.mypos.json
 .venv
 env/
 venv/
