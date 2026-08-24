@@ -71,8 +71,6 @@ logger = logging.getLogger(__name__)
 
 config = load_config_from_file()
 
-TERMINAL_MODE = config.get("app", {}).get("mode", "sumup")
-TERMINAL_TYPE = config.get("app", {}).get("terminal_type", TERMINAL_MODE)
 PORT = 8888
 
 terminal: Optional[object] = None
@@ -87,6 +85,30 @@ def _get_terminal_class(terminal_type: str):
         logger.warning(f"Unknown terminal type '{terminal_type}', falling back to sumup")
         cls = SumUpTerminal
     return cls
+
+
+def _resolve_terminal_type(cfg: dict) -> str:
+    terminal_type = cfg.get("app", {}).get("terminal_type")
+    if terminal_type:
+        t = str(terminal_type).lower()
+        if t in TERMINAL_CLASSES:
+            return t
+        logger.warning(f"Unknown terminal type '{terminal_type}', falling back to section detection")
+
+    has_sumup = "sumup" in cfg
+    has_mypos = "mypos" in cfg
+
+    if has_mypos and not has_sumup:
+        return "mypos"
+
+    if has_sumup and has_mypos:
+        logger.warning("Both 'sumup' and 'mypos' sections configured, defaulting to sumup")
+    elif not has_sumup:
+        logger.warning("No 'sumup' or 'mypos' section found, defaulting to sumup")
+    return "sumup"
+
+
+TERMINAL_TYPE = _resolve_terminal_type(config)
 
 
 @asynccontextmanager
