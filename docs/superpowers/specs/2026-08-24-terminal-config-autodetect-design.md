@@ -66,6 +66,11 @@ influences terminal selection.
   auto-detection).
 - `config.json` stays untouched as the default.
 
+Both new config files are **local-only**: `.gitignore` already excludes
+`config.json` because it holds live API keys, so `config.sumup.json` /
+`config.mypos.json` are added to `.gitignore` too — only the `.gitignore`
+change is committed.
+
 Usage:
 
 ```bash

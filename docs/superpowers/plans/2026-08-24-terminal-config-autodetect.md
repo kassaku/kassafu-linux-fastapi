@@ -264,9 +264,23 @@ sleep 3 && curl -s http://localhost:8888/health; kill %1
 
 Expected: `"mode":"sumup"` (config.json has only a sumup section).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Keep both files out of git (secrets policy) and commit only .gitignore**
+
+`config.json` is gitignored (`.gitignore`) and untracked — the SumUp API key has never
+entered git history. The per-terminal configs contain the same secrets, so they must
+stay local too. Append to `.gitignore` under the existing `config.json` line:
+
+```
+config.sumup.json
+config.mypos.json
+```
+
+Then commit ONLY `.gitignore`:
 
 ```bash
-git add config.sumup.json config.mypos.json
-git commit -m "Add per-terminal test config files"
+git add .gitignore
+git commit -m "Ignore per-terminal test config files"
 ```
+
+Verify neither config file is tracked: `git ls-files | grep config.` → no matches
+expected (both ignored).
