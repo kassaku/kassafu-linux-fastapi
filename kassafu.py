@@ -115,6 +115,8 @@ TERMINAL_TYPE = _resolve_terminal_type(config)
 async def lifespan(app: FastAPI):
     global terminal, TERMINAL_TYPE
 
+    TERMINAL_TYPE = _resolve_terminal_type(config)
+
     logger.info(f"KassaFu starting with terminal type '{TERMINAL_TYPE}' on port {PORT}")
 
     terminal_cls = _get_terminal_class(TERMINAL_TYPE)
