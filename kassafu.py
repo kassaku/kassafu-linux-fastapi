@@ -37,14 +37,12 @@ import uvicorn
 from sumup_terminal import SumUpTerminal
 from mypos_terminal import MyPOSTerminal
 
-CONFIG_FILE = "config.json"
-
 TERMINAL_CLASSES = {
     "sumup": SumUpTerminal,
     "mypos": MyPOSTerminal,
 }
 
-def load_config_from_file(config_path: str = CONFIG_FILE) -> dict:
+def load_config_from_file(config_path: str) -> dict:
     """Load configuration from JSON file"""
     try:
         with open(config_path, 'r') as f:
@@ -69,7 +67,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-config = load_config_from_file()
+config = {}
 
 PORT = 8888
 
@@ -139,31 +137,36 @@ def _apply_runtime_config(new_config: dict):
 TERMINAL_TYPE = _resolve_terminal_type(config)
 
 
+async def _maybe_discover(term):
+    """Run reader/terminal discovery when supported and no id is configured yet."""
+    if hasattr(term, 'discover_reader') and hasattr(term, 'reader_id'):
+        if not term.reader_id:
+            logger.info("No reader ID provided, discovering...")
+            await term.discover_reader()
+            if not term.reader_id:
+                logger.warning(f"No {TERMINAL_TYPE} terminal found. Please check your configuration.")
+    elif hasattr(term, 'terminal_id'):
+        if not term.terminal_id:
+            logger.info("No terminal ID provided, discovering...")
+            await term.discover_reader()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global terminal, TERMINAL_TYPE
 
-    TERMINAL_TYPE = _resolve_terminal_type(config)
+    if any(name in config for name in TERMINAL_CLASSES):
+        TERMINAL_TYPE = _resolve_terminal_type(config)
+        logger.info(f"KassaFu starting with terminal type '{TERMINAL_TYPE}' on port {PORT}")
 
-    logger.info(f"KassaFu starting with terminal type '{TERMINAL_TYPE}' on port {PORT}")
-
-    terminal_cls = _get_terminal_class(TERMINAL_TYPE)
-    terminal = terminal_cls()
-
-    if not terminal.init(config):
-        logger.error(f"Failed to initialize {TERMINAL_TYPE} terminal with configuration")
-        raise RuntimeError(f"{TERMINAL_TYPE} terminal initialization failed")
-
-    if hasattr(terminal, 'discover_reader') and hasattr(terminal, 'reader_id'):
-        if not terminal.reader_id:
-            logger.info("No reader ID provided, discovering...")
-            await terminal.discover_reader()
-            if not terminal.reader_id:
-                logger.warning(f"No {TERMINAL_TYPE} terminal found. Please check your configuration.")
-    elif hasattr(terminal, 'terminal_id'):
-        if not terminal.terminal_id:
-            logger.info("No terminal ID provided, discovering...")
-            await terminal.discover_reader()
+        candidate = _get_terminal_class(TERMINAL_TYPE)()
+        if not candidate.init(config):
+            logger.error(f"Failed to initialize {TERMINAL_TYPE} terminal - continuing unconfigured")
+        else:
+            terminal = candidate
+            await _maybe_discover(terminal)
+    else:
+        logger.info("KassaFu started without configuration - waiting for POST /config")
 
     asyncio.create_task(process_payment_queue())
 
@@ -378,8 +381,8 @@ async def health():
     """Health check endpoint"""
     if not terminal:
         return {
-            "status": "initializing",
-            "mode": TERMINAL_TYPE,
+            "status": "unconfigured",
+            "mode": None,
             "terminal_ready": False,
             "error_code": 0
         }
@@ -460,13 +463,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="KassaFu Payment Bridge")
     parser.add_argument("--server", action="store_true", help="Run in server mode")
-    parser.add_argument("--config", type=str, default="config.json", help="Configuration file path")
+    parser.add_argument("--config", type=str, help="Configuration file path (optional manual seed)")
     parser.add_argument("--port", type=int, help="Override port (default: 8888)")
     args = parser.parse_args()
 
-    if args.config != "config.json":
-        CONFIG_FILE = args.config
-        config = load_config_from_file(CONFIG_FILE)
+    if args.config:
+        config = load_config_from_file(args.config)
 
     port = args.port if args.port else 8888
 
