@@ -1,10 +1,12 @@
 import asyncio
+import os
 import unittest
 from datetime import datetime, timezone
+from unittest import mock
 
 import httpx
 
-from mypos_gateway import MyPOSGateway, MyPOSGatewayError
+from mypos_gateway import MyPOSGateway, MyPOSGatewayError, _mask_secrets
 
 CONFIG = {
     "gateway_url": "https://demo-api-gateway.mypos.com",
@@ -234,6 +236,61 @@ class RequestTests(unittest.TestCase):
         seen = asyncio.run(scenario())
         self.assertEqual(seen["method"], "DELETE")
         self.assertEqual(seen["path"], "/epos/v1/payments/pay_1")
+
+
+class HttpDebugLoggingTests(unittest.TestCase):
+    def test_mask_secrets_hides_all_credential_forms(self):
+        form = "grant_type=client_credentials&client_id=client_integration&client_secret=secret_integration"
+        masked = _mask_secrets(form)
+        self.assertNotIn("secret_integration", masked)
+        self.assertIn("client_secret=***", masked)
+        self.assertIn("client_id=client_integration", masked)
+
+        js = '{"client_id": "cli_merchant", "client_secret": "sec_merchant"}'
+        masked = _mask_secrets(js)
+        self.assertNotIn("sec_merchant", masked)
+        self.assertIn('"client_id": "cli_merchant"', masked)
+
+        token_body = '{"access_token": "tok_integration", "expires_in": 3600}'
+        self.assertNotIn("tok_integration", _mask_secrets(token_body))
+
+    def test_debug_hook_logs_masked_traffic_when_enabled(self):
+        async def scenario():
+            def handler(request):
+                return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+
+            gateway = make_gateway(handler)
+            with self.assertLogs("mypos_gateway", level="INFO") as captured:
+                await gateway._get_integration_token()
+            return "\n".join(captured.output)
+
+        with mock.patch.dict(os.environ, {"KASSAFU_HTTP_DEBUG": "1"}):
+            log = asyncio.run(scenario())
+
+        self.assertIn("--> POST https://demo-api-gateway.mypos.com/api/v1/oauth/token", log)
+        self.assertIn("client_secret=***", log)
+        self.assertIn("<-- HTTP 200", log)
+        self.assertNotIn("secret_integration", log)
+        self.assertNotIn("tok_integration", log)
+
+    def test_logging_disabled_by_default(self):
+        async def scenario():
+            def handler(request):
+                return httpx.Response(200, json={"access_token": "t"})
+
+            gateway = make_gateway(handler)
+            try:
+                with self.assertLogs("mypos_gateway", level="INFO") as captured:
+                    await gateway._get_integration_token()
+            except AssertionError:
+                return ""
+            return "\n".join(captured.output)
+
+        with mock.patch.dict(os.environ):
+            os.environ.pop("KASSAFU_HTTP_DEBUG", None)
+            log = asyncio.run(scenario())
+
+        self.assertNotIn("-->", log)
 
 
 if __name__ == "__main__":

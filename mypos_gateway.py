@@ -25,11 +25,21 @@ SOFTWARE.
 import asyncio
 import json
 import logging
+import os
+import re
 import httpx
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_secrets(text: str) -> str:
+    text = re.sub(r'(?i)(client_secret["\s=:]+)[^&"\s]+', r"\1***", text)
+    text = re.sub(r'"access_token"\s*:\s*"[^"]*"', '"access_token": "***"', text)
+    text = re.sub(r'"session"\s*:\s*"[^"]*"', '"session": "***"', text)
+    text = re.sub(r"Bearer\s+[^\"\s]+", "Bearer ***", text)
+    return text
 
 
 class MyPOSGatewayError(Exception):
@@ -68,9 +78,21 @@ class MyPOSGateway:
         self._session_lock = asyncio.Lock()
 
     def _new_client(self) -> httpx.AsyncClient:
+        hooks = None
+        if os.environ.get("KASSAFU_HTTP_DEBUG"):
+            hooks = {"request": [self._log_request], "response": [self._log_response]}
         if self._transport is not None:
-            return httpx.AsyncClient(transport=self._transport)
-        return httpx.AsyncClient()
+            return httpx.AsyncClient(transport=self._transport, event_hooks=hooks)
+        return httpx.AsyncClient(event_hooks=hooks)
+
+    async def _log_request(self, request: httpx.Request):
+        body = _mask_secrets(request.read().decode(errors="replace")) if request.content else ""
+        logger.info(f"--> {request.method} {request.url} {body}")
+
+    async def _log_response(self, response: httpx.Response):
+        await response.aread()
+        body = _mask_secrets(response.text[:500]) if response.content else ""
+        logger.info(f"<-- HTTP {response.status_code} {response.request.url} {body}")
 
     async def _get_integration_token(self) -> str:
         async with self._token_lock:
