@@ -459,7 +459,12 @@ if __name__ == "__main__":
     parser.add_argument("--server", action="store_true", help="Run in server mode")
     parser.add_argument("--config", type=str, help="Configuration file path (optional manual seed)")
     parser.add_argument("--port", type=int, help="Override port (default: 8888)")
+    parser.add_argument("--debug", action="store_true", help="Enable verbose HTTP logging (masked secrets)")
     args = parser.parse_args()
+
+    if args.debug:
+        import os
+        os.environ["KASSAFU_HTTP_DEBUG"] = "1"
 
     if args.config:
         config = load_config_from_file(args.config)
