@@ -429,33 +429,27 @@ async def get_config():
 
 @app.post("/config")
 async def update_config(new_config: dict):
-    """Update configuration at runtime (in-memory only, does not persist across restarts)"""
-    global config
+    """Replace runtime configuration and hot-swap the terminal (in-memory only)"""
+    if active_payment:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "success": False,
+                "message": "Payment in progress, configuration rejected",
+                "error_code": 108012,
+            },
+        )
 
-    if "app" in new_config:
-        config["app"].update(new_config["app"])
+    ok, detail = _apply_runtime_config(new_config)
+    if not ok:
+        raise HTTPException(status_code=400, detail=detail)
 
-    term_type = config.get("app", {}).get("terminal_type") or config.get("app", {}).get("mode", "sumup")
-    term_cls = _get_terminal_class(term_type)
+    try:
+        await _maybe_discover(terminal, TERMINAL_TYPE)
+    except Exception as exc:  # discovery problems must not fail an applied config
+        logger.warning(f"Post-swap discovery failed: {exc}")
 
-    term_config = {}
-    for key in term_cls.__name__.lower().replace("terminal", ""):
-        pass
-    for section in TERMINAL_CLASSES:
-        if section in new_config:
-            config.setdefault(section, {}).update(new_config[section])
-
-    if not terminal.update_config(config):
-        raise HTTPException(status_code=400, detail="Invalid configuration")
-
-    if hasattr(terminal, 'reader_id') and not terminal.reader_id:
-        if hasattr(terminal, 'discover_reader'):
-            await terminal.discover_reader()
-    elif hasattr(terminal, 'terminal_id') and not terminal.terminal_id:
-        if hasattr(terminal, 'discover_reader'):
-            await terminal.discover_reader()
-
-    return {"success": True, "message": "Configuration updated"}
+    return {"success": True, "terminal_type": detail}
 
 
 if __name__ == "__main__":
