@@ -87,7 +87,8 @@ class MyPOSGateway:
 
     async def _log_request(self, request: httpx.Request):
         body = request.read().decode(errors="replace") if request.content else ""
-        logger.info(f"--> {request.method} {request.url} {body}")
+        headers = " ".join(f"{k}: {v}" for k, v in request.headers.items())
+        logger.info(f"--> {request.method} {request.url} [{headers}] {body}")
 
     async def _log_response(self, response: httpx.Response):
         await response.aread()

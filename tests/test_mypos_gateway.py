@@ -272,6 +272,7 @@ class HttpDebugLoggingTests(unittest.TestCase):
 
         self.assertIn("--> POST https://demo-api-gateway.mypos.com/api/v1/oauth/token", log)
         self.assertIn("client_secret=secret_integration", log)
+        self.assertIn("content-type: application/x-www-form-urlencoded", log)
         self.assertIn("<-- HTTP 200", log)
         self.assertNotIn("tok_integration", log)
 
