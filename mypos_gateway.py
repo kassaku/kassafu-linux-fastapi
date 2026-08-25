@@ -60,11 +60,11 @@ class MyPOSGateway:
 
     def __init__(self, config: Dict, transport=None):
         self.gateway_url = config.get("gateway_url", "").rstrip("/")
-        integration = config.get("integration", {})
-        self.integration_client_id = integration.get("client_id", "")
-        self.integration_client_secret = integration.get("client_secret", "")
-        self.partner_id = config.get("partner_id", "")
-        self.application_id = config.get("application_id", "")
+        partner = config.get("partner", {})
+        self.partner_client_id = partner.get("client_id", "")
+        self.partner_client_secret = partner.get("client_secret", "")
+        self.partner_id = partner.get("partner_id", "")
+        self.application_id = partner.get("application_id", "")
         merchant = config.get("merchant", {})
         self.merchant_client_id = merchant.get("client_id", "")
         self.merchant_client_secret = merchant.get("client_secret", "")
@@ -111,8 +111,8 @@ class MyPOSGateway:
                     url,
                     data={
                         "grant_type": "client_credentials",
-                        "client_id": self.integration_client_id,
-                        "client_secret": self.integration_client_secret,
+                        "client_id": self.partner_client_id,
+                        "client_secret": self.partner_client_secret,
                     },
                     timeout=10,
                 )

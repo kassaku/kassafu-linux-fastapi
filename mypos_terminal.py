@@ -40,8 +40,8 @@ class MyPOSTerminal:
 
     def __init__(self):
         self.gateway_url = ""
-        self.integration_client_id = ""
-        self.integration_client_secret = ""
+        self.partner_client_id = ""
+        self.partner_client_secret = ""
         self.partner_id = ""
         self.application_id = ""
         self.merchant_client_id = ""
@@ -68,11 +68,14 @@ class MyPOSTerminal:
             self.mypos_config = config.get("mypos", {})
 
             self.gateway_url = self.mypos_config.get("gateway_url", "").rstrip("/")
-            integration = self.mypos_config.get("integration", {})
-            self.integration_client_id = integration.get("client_id", "")
-            self.integration_client_secret = integration.get("client_secret", "")
-            self.partner_id = self.mypos_config.get("partner_id", "")
-            self.application_id = self.mypos_config.get("application_id", "")
+            partner = self.mypos_config.get("partner", {})
+            if not partner:
+                logger.error("Missing mypos.partner credentials (renamed from 'integration')")
+                return False
+            self.partner_client_id = partner.get("client_id", "")
+            self.partner_client_secret = partner.get("client_secret", "")
+            self.partner_id = partner.get("partner_id", "")
+            self.application_id = partner.get("application_id", "")
             merchant = self.mypos_config.get("merchant", {})
             self.merchant_client_id = merchant.get("client_id", "")
             self.merchant_client_secret = merchant.get("client_secret", "")
@@ -81,11 +84,11 @@ class MyPOSTerminal:
             if not self.gateway_url:
                 logger.error("Missing mypos.gateway_url in configuration")
                 return False
-            if not self.integration_client_id or not self.integration_client_secret:
-                logger.error("Missing mypos.integration.client_id or client_secret")
+            if not self.partner_client_id or not self.partner_client_secret:
+                logger.error("Missing mypos.partner.client_id or client_secret")
                 return False
             if not self.partner_id or not self.application_id:
-                logger.error("Missing mypos.partner_id or application_id")
+                logger.error("Missing mypos.partner.partner_id or application_id")
                 return False
             if not self.merchant_client_id or not self.merchant_client_secret:
                 logger.error("Missing mypos.merchant.client_id or client_secret")
@@ -93,12 +96,12 @@ class MyPOSTerminal:
 
             self.gateway = MyPOSGateway({
                 "gateway_url": self.gateway_url,
-                "integration": {
-                    "client_id": self.integration_client_id,
-                    "client_secret": self.integration_client_secret,
+                "partner": {
+                    "client_id": self.partner_client_id,
+                    "client_secret": self.partner_client_secret,
+                    "application_id": self.application_id,
+                    "partner_id": self.partner_id,
                 },
-                "partner_id": self.partner_id,
-                "application_id": self.application_id,
                 "merchant": {
                     "client_id": self.merchant_client_id,
                     "client_secret": self.merchant_client_secret,
@@ -127,8 +130,10 @@ class MyPOSTerminal:
             "app": self.app_config,
             "mypos": {
                 "gateway_url": self.gateway_url,
-                "partner_id": self.partner_id,
-                "application_id": self.application_id,
+                "partner": {
+                    "partner_id": self.partner_id,
+                    "application_id": self.application_id,
+                },
                 "terminal_id": self.terminal_id,
             }
         }

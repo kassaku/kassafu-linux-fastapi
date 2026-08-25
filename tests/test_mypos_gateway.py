@@ -10,9 +10,12 @@ from mypos_gateway import MyPOSGateway, MyPOSGatewayError, _mask_secrets
 
 CONFIG = {
     "gateway_url": "https://demo-api-gateway.mypos.com",
-    "integration": {"client_id": "client_integration", "client_secret": "secret_integration"},
-    "partner_id": "mps-p-test",
-    "application_id": "mps-app-test",
+    "partner": {
+        "client_id": "client_integration",
+        "client_secret": "secret_integration",
+        "application_id": "mps-app-test",
+        "partner_id": "mps-p-test",
+    },
     "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
     "terminal_id": "80026232",
 }

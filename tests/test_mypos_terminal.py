@@ -8,9 +8,12 @@ CONFIG = {
     "app": {"name": "KassaFu", "mode": "sandbox"},
     "mypos": {
         "gateway_url": "https://demo-api-gateway.mypos.com",
-        "integration": {"client_id": "client_integration", "client_secret": "secret_integration"},
-        "partner_id": "mps-p-test",
-        "application_id": "mps-app-test",
+        "partner": {
+            "client_id": "client_integration",
+            "client_secret": "secret_integration",
+            "application_id": "mps-app-test",
+            "partner_id": "mps-p-test",
+        },
         "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
         "terminal_id": "80026232",
     },
@@ -59,16 +62,23 @@ def make_terminal():
 class InitTests(unittest.TestCase):
     def test_init_fails_without_gateway_url(self):
         t = MyPOSTerminal()
-        config = {"mypos": {"integration": {"client_id": "x", "client_secret": "y"}}}
+        config = {"mypos": {"partner": {"client_id": "x", "client_secret": "y"}}}
         self.assertFalse(t.init(config))
 
     def test_init_fails_without_merchant_credentials(self):
         t = MyPOSTerminal()
         config = {"mypos": {
             "gateway_url": "https://demo-api-gateway.mypos.com",
-            "integration": {"client_id": "x", "client_secret": "y"},
-            "partner_id": "mps-p-test",
-            "application_id": "mps-app-test",
+            "partner": {"client_id": "x", "client_secret": "y"},
+        }}
+        self.assertFalse(t.init(config))
+
+    def test_init_rejects_old_integration_key(self):
+        t = MyPOSTerminal()
+        config = {"mypos": {
+            "gateway_url": "https://demo-api-gateway.mypos.com",
+            "integration": {"client_id": "client_old", "client_secret": "secret_old"},
+            "merchant": {"client_id": "cli_x", "client_secret": "sec_x"},
         }}
         self.assertFalse(t.init(config))
 
@@ -83,6 +93,10 @@ class InitTests(unittest.TestCase):
         mypos = cfg["mypos"]
         self.assertNotIn("integration", mypos)
         self.assertNotIn("merchant", mypos)
+        self.assertEqual(
+            mypos["partner"],
+            {"partner_id": "mps-p-test", "application_id": "mps-app-test"}
+        )
         self.assertEqual(mypos["terminal_id"], "80026232")
 
 

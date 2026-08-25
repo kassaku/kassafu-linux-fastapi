@@ -16,9 +16,12 @@ SUMUP_CONFIG = {
 MYPOS_CONFIG = {
     "mypos": {
         "gateway_url": "https://demo-api-gateway.mypos.com",
-        "integration": {"client_id": "ci", "client_secret": "cs"},
-        "partner_id": "mps-p-test",
-        "application_id": "mps-app-test",
+        "partner": {
+            "client_id": "ci",
+            "client_secret": "cs",
+            "application_id": "mps-app-test",
+            "partner_id": "mps-p-test",
+        },
         "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
         "terminal_id": "80026232",
     }
@@ -100,7 +103,7 @@ class ApplyRuntimeConfigTests(unittest.TestCase):
 
         broken = {
             "mypos": {
-                k: v for k, v in MYPOS_CONFIG["mypos"].items() if k != "partner_id"
+                k: v for k, v in MYPOS_CONFIG["mypos"].items() if k != "partner"
             }
         }
         ok, detail = _apply_runtime_config(broken)
