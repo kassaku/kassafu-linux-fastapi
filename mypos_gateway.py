@@ -92,8 +92,9 @@ class MyPOSGateway:
 
     async def _log_response(self, response: httpx.Response):
         await response.aread()
+        headers = " ".join(f"{k}: {v}" for k, v in response.headers.items())
         body = response.text[:500] if response.content else ""
-        logger.info(f"<-- HTTP {response.status_code} {response.request.url} {body}")
+        logger.info(f"<-- HTTP {response.status_code} {response.request.url} [{headers}] {body}")
 
     async def _get_integration_token(self) -> str:
         async with self._token_lock:
@@ -173,7 +174,14 @@ class MyPOSGateway:
             expires_in = data.get("expires_in", 360)
             self._session_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 30))
             return session
-        raise MyPOSGatewayError(response.status_code, f"Session request failed: HTTP {response.status_code}: {response.text[:200]}")
+        detail = f"Session request failed: HTTP {response.status_code}: {response.text[:200]}"
+        if response.status_code == 400:
+            detail += (
+                "\nHint: check that 'mypos.merchant.client_id' (cli_*) and"
+                " 'mypos.merchant.client_secret' (sec_*) are valid integration"
+                " merchant credentials from the Partners Portal."
+            )
+        raise MyPOSGatewayError(response.status_code, detail)
 
     def _invalidate_tokens(self):
         self._integration_token = None
