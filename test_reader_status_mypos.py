@@ -91,9 +91,9 @@ def test_reader_status():
             else:
                 print(f"❌ [{code}] READER IS OFFLINE")
                 print("   Please check:")
-    print("   1. Is the payment terminal powered on?")
-    print("   2. Does it have internet connection (Wi-Fi/Cellular)?")
-    print("   3. Is it properly paired with your account?")
+                print("   1. Is the payment terminal powered on?")
+                print("   2. Does it have internet connection (Wi-Fi/Cellular)?")
+                print("   3. Is it properly paired with your account?")
                 return False
                 
         elif response.status_code == 503:
