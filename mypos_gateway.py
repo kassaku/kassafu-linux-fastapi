@@ -92,7 +92,7 @@ class MyPOSGateway:
 
     async def _log_response(self, response: httpx.Response):
         await response.aread()
-        body = _mask_secrets(response.text[:500]) if response.content else ""
+        body = response.text[:500] if response.content else ""
         logger.info(f"<-- HTTP {response.status_code} {response.request.url} {body}")
 
     async def _get_integration_token(self) -> str:

@@ -274,7 +274,7 @@ class HttpDebugLoggingTests(unittest.TestCase):
         self.assertIn("client_secret=secret_integration", log)
         self.assertIn("content-type: application/x-www-form-urlencoded", log)
         self.assertIn("<-- HTTP 200", log)
-        self.assertNotIn("tok_integration", log)
+        self.assertIn("tok_integration", log)
 
     def test_logging_disabled_by_default(self):
         async def scenario():
