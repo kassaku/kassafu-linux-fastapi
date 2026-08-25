@@ -134,17 +134,17 @@ def _apply_runtime_config(new_config: dict):
     return True, term_type
 
 
-TERMINAL_TYPE = _resolve_terminal_type(config)
+TERMINAL_TYPE = "sumup"
 
 
-async def _maybe_discover(term):
+async def _maybe_discover(term, terminal_type: str):
     """Run reader/terminal discovery when supported and no id is configured yet."""
     if hasattr(term, 'discover_reader') and hasattr(term, 'reader_id'):
         if not term.reader_id:
             logger.info("No reader ID provided, discovering...")
             await term.discover_reader()
             if not term.reader_id:
-                logger.warning(f"No {TERMINAL_TYPE} terminal found. Please check your configuration.")
+                logger.warning(f"No {terminal_type} terminal found. Please check your configuration.")
     elif hasattr(term, 'terminal_id'):
         if not term.terminal_id:
             logger.info("No terminal ID provided, discovering...")
@@ -164,7 +164,7 @@ async def lifespan(app: FastAPI):
             logger.error(f"Failed to initialize {TERMINAL_TYPE} terminal - continuing unconfigured")
         else:
             terminal = candidate
-            await _maybe_discover(terminal)
+            await _maybe_discover(terminal, TERMINAL_TYPE)
     else:
         logger.info("KassaFu started without configuration - waiting for POST /config")
 
