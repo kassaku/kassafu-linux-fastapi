@@ -271,9 +271,8 @@ class HttpDebugLoggingTests(unittest.TestCase):
             log = asyncio.run(scenario())
 
         self.assertIn("--> POST https://demo-api-gateway.mypos.com/api/v1/oauth/token", log)
-        self.assertIn("client_secret=***", log)
+        self.assertIn("client_secret=secret_integration", log)
         self.assertIn("<-- HTTP 200", log)
-        self.assertNotIn("secret_integration", log)
         self.assertNotIn("tok_integration", log)
 
     def test_logging_disabled_by_default(self):

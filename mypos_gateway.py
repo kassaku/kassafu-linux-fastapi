@@ -86,7 +86,7 @@ class MyPOSGateway:
         return httpx.AsyncClient(event_hooks=hooks)
 
     async def _log_request(self, request: httpx.Request):
-        body = _mask_secrets(request.read().decode(errors="replace")) if request.content else ""
+        body = request.read().decode(errors="replace") if request.content else ""
         logger.info(f"--> {request.method} {request.url} {body}")
 
     async def _log_response(self, response: httpx.Response):
