@@ -28,11 +28,37 @@ SOFTWARE.
 
 import os
 import sys
+import json
 import requests
 from dotenv import load_dotenv
 
+CONFIG_FILE = os.environ.get('KASSAFU_CONFIG', 'config.mypos.json')
+
+
+def push_config():
+    """Push the myPOS configuration to the running server."""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        print(f"⚠️  Config file {CONFIG_FILE} not found, keeping current server config")
+        return
+    except json.JSONDecodeError as e:
+        print(f"⚠️  Invalid JSON in {CONFIG_FILE}: {e}, keeping current server config")
+        return
+
+    try:
+        resp = requests.post('http://localhost:8888/config', json=config, timeout=5)
+        if resp.status_code == 200:
+            print(f"✅ Config pushed to KassaFu (terminal: {resp.json().get('terminal_type', '?')})")
+        else:
+            print(f"⚠️  Config push failed ({resp.status_code}): {resp.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️  Config push failed: {e}")
+
+
 def test_reader_status():
-    """Check if Solo terminal is present and online"""
+    """Check if the payment terminal is present and online"""
     print("🔍 KassaFu Reader Status Test")
     
     # Check if KassaFu is running
@@ -48,6 +74,8 @@ def test_reader_status():
         print("❌ [108004] KassaFu server is not running")
         print("   In a separate terminal, run: python3 kassafu.py --server")
         return False
+
+    push_config()
     
     # Check reader status
     print("\n⏳ Checking reader status...")

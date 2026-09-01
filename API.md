@@ -1,6 +1,6 @@
 # KassaFu API Documentation
 
-KassaFu is a payment bridge between a POS system and a SumUp Solo terminal.
+KassaFu is a payment bridge between a POS system and payment terminals (**SumUp** and **myPOS**).
 It exposes a REST API built with FastAPI to process payments, monitor terminal status, and manage configuration.
 
 # Table of Contents
@@ -13,11 +13,13 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
 - [Running the Server](#running-the-server)
 - [API Endpoints](#api-endpoints)
   - [POST /pay](#post-pay)
+  - [GET /payment/history](#get-paymenthistory)
   - [GET /payment/status](#get-paymentstatus)
+  - [GET /payment/cancel](#get-paymentcancel)
   - [GET /health](#get-health)
   - [GET /reader/status](#get-readerstatus)
-- [GET /config](#get-config)
-- [POST /config](#post-config)
+  - [GET /config](#get-config)
+  - [POST /config](#post-config)
 - [Payment Flow](#payment-flow)
 - [Error Handling](#error-handling)
 - [Logging](#logging)
@@ -31,8 +33,9 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
 * FastAPI-powered REST API
 * Queue-based payment handling
 * SumUp Solo integration
+* myPOS ePOS Gateway integration
 * Live payment status polling
-* Dynamic configuration update
+* Dynamic configuration update (hot-swap between SumUp / myPOS)
 * Health and terminal monitoring
 * Async payment processing
 
@@ -43,13 +46,13 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
 * Python 3.10+
 * FastAPI
 * Uvicorn
-* SumUp Solo terminal
-* Valid SumUp API credentials
+* SumUp Solo terminal or myPOS terminal
+* Valid SumUp or myPOS API credentials
 
 Install dependencies:
 
 ```bash
-pip install fastapi uvicorn
+pip install -r requirements.txt
 ```
 
 ---
@@ -57,13 +60,18 @@ pip install fastapi uvicorn
 # Configuration
 
 ## Installation
-Create the ~/zhongcan directory.
-Run ./install.sh 
+Run `./install.sh` (installs KassaFu to `/usr/share/kassafu` and enables the `kassafu` systemd service), or build and install the Debian package:
+
+```bash
+./create_deb
+sudo dpkg -i kassafu.deb
+```
+
 To check if this works, see if port 8888 is used and call : sudo service kassafu status
 
 ## Runtime Configuration
 
-KassaFu exposes a runtime configuration API. All changes are **in-memory only** and do not persist across server restarts. To make permanent changes, edit `config.json` directly.
+KassaFu exposes a runtime configuration API. All changes are **in-memory only** and do not persist across server restarts. KassaFu starts unconfigured and receives its terminal configuration (SumUp or myPOS) at runtime via `POST /config`. See the [POST /config](#post-config) endpoint below.
 
 See the [GET /config](#get-config) and [POST /config](#post-config) endpoints below.
 
@@ -177,6 +185,49 @@ If another payment is already active:
 
 ---
 
+## GET `/payment/history`
+
+Return the last N transactions from the transaction log (`transactions.log`).
+
+### Query Parameters
+
+| Parameter | Type   | Required | Description                          |
+| --------- | ------ | -------- | ------------------------------------ |
+| limit     | int    | No       | Number of transactions to return (default 20) |
+
+---
+
+### Example Request
+
+```http
+GET /payment/history?limit=5
+```
+
+### Example Curl
+```
+curl "http://127.0.0.1:8888/payment/history?limit=5"
+```
+
+### Example Response
+
+```json
+{
+  "items": [
+    {
+      "timestamp": "2026-08-01T12:00:00",
+      "order_id": "ORDER-1001",
+      "amount_cents": 1250,
+      "currency": "EUR",
+      "status": "successful",
+      "transaction_id": "tran_abc123"
+    }
+  ],
+  "error_code": 0
+}
+```
+
+---
+
 ## GET `/payment/status`
 
 Check the status of a payment. After starting any payment, do this for 32 seconds every 2 seconds until an issue happened or until it is payed.
@@ -258,9 +309,64 @@ curl "http://127.0.0.1:8888/payment/status?order_id=ORDER-1001"
 
 ---
 
+## GET / DELETE `/payment/cancel`
+
+Cancel an active payment. Accepts both `GET` and `DELETE`.
+
+### Query Parameters
+
+| Parameter | Type   | Required | Description       |
+| --------- | ------ | -------- | ----------------- |
+| order_id  | string | Yes      | Order ID to cancel |
+
+### Example Request
+
+```http
+GET /payment/cancel?order_id=ORDER-1001
+```
+
+### Example Curl
+```
+curl "http://127.0.0.1:8888/payment/cancel?order_id=ORDER-1001"
+```
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "status": "cancelled",
+  "message": "Payment cancelled",
+  "error_code": 0
+}
+```
+
+### Not Found Response (HTTP 404)
+
+```json
+{
+  "success": false,
+  "status": "not_found",
+  "message": "No active payment found for order ORDER-1001",
+  "error_code": 108002
+}
+```
+
+### Terminal Not Ready Response (HTTP 503)
+
+```json
+{
+  "status": "error",
+  "message": "Terminal not ready",
+  "error_code": 108008
+}
+```
+
+---
+
 ## GET `/health`
 
-Just to check if the service is running correct. This does not communicate with SumUp.
+Just to check if the service is running correct. This does not communicate with any terminal.
 
 ### Example
 At start of the program you should check if the service is activated. If not, installation is failed or start the service.  
@@ -274,21 +380,46 @@ Health check endpoint.
 
 ```json
 {
-  "status": "healthy",
-  "mode": "real",
-  "terminal_ready": true,
-  "reader_id": "SOLO-123456",
+  "status": "unconfigured",
+  "mode": null,
+  "terminal_ready": false,
   "error_code": 0
 }
-```curl http://127.0.0.1:8888/health
+```
+
+When configured, `mode` reports the active terminal type (`"mypos"` or `"sumup"`):
+
+```json
+{
+  "status": "healthy",
+  "mode": "mypos",
+  "terminal_ready": true,
+  "error_code": 0
+}
+```
 
 ---
 
 ## GET `/reader/status`
 
-Check the SumUp Solo terminal status.
+Check the configured terminal (SumUp or myPOS) status.
 
-### Example Response
+### Example Response (myPOS)
+
+```json
+{
+  "online": true,
+  "ready": true,
+  "terminal_id": "80581413",
+  "terminal_name": "utra2601",
+  "model": "N96",
+  "serial_number": "N96N960WC69104",
+  "device_currency": "EUR",
+  "error_code": 0
+}
+```
+
+### Example Response (SumUp)
 
 ```json
 {
@@ -302,7 +433,7 @@ Check the SumUp Solo terminal status.
 
 ## GET `/config`
 
-Return the current runtime configuration. The `api_key` is intentionally excluded from the response.
+Return the current runtime configuration. The `api_key`/`client_secret` are intentionally excluded from the response.
 
 ### Example
 
@@ -310,12 +441,26 @@ Return the current runtime configuration. The `api_key` is intentionally exclude
 curl http://127.0.0.1:8888/config
 ```
 
-### Example Response
+### Example Response (myPOS)
 
 ```json
 {
   "app": {
-    "mode": "real"
+    "mode": "mypos"
+  },
+  "mypos": {
+    "gateway_url": "https://api-gateway.mypos.com",
+    "terminal_id": "80581413"
+  }
+}
+```
+
+### Example Response (SumUp)
+
+```json
+{
+  "app": {
+    "mode": "sumup"
   },
   "sumup": {
     "merchant_code": "MN2RA8M1",
@@ -325,20 +470,58 @@ curl http://127.0.0.1:8888/config
 }
 ```
 
----
-
-## POST `/config`
-
-Update configuration at runtime. Accepts a full or partial configuration object. Only the provided fields are updated; omitted fields retain their current values. Changes are **in-memory only** — edit `config.json` to make permanent changes.
-
-If `reader_id` is omitted, the server will attempt to auto-discover a Solo terminal on the merchant account.
-
-### Request Body
+When no configuration has been pushed yet:
 
 ```json
 {
   "app": {
-    "mode": "real"
+    "mode": null
+  }
+}
+```
+
+---
+
+## POST `/config`
+
+Update configuration at runtime and **hot-swap the terminal implementation** (SumUp ↔ myPOS). The posted object replaces the runtime configuration entirely; the previous terminal is swapped out and the new one initialized in its place. Changes are **in-memory only** and do not persist across restarts.
+
+If `reader_id` (SumUp) or `terminal_id` (myPOS) is omitted, the server attempts to auto-discover a terminal on the account.
+
+The request is rejected (HTTP 409) while a payment is in progress.
+
+### Request Body — myPOS
+
+```json
+{
+  "app": {
+    "name": "KassaFu",
+    "mode": "mypos"
+  },
+  "mypos": {
+    "gateway_url": "https://api-gateway.mypos.com",
+    "partner": {
+      "client_id": "client_...",
+      "client_secret": "secret_...",
+      "application_id": "mps-app-...",
+      "partner_id": "mps-p-..."
+    },
+    "merchant": {
+      "client_id": "cli_...",
+      "client_secret": "sec_..."
+    },
+    "terminal_id": "80581413"
+  }
+}
+```
+
+### Request Body — SumUp
+
+```json
+{
+  "app": {
+    "name": "KassaFu",
+    "mode": "sumup"
   },
   "sumup": {
     "api_key": "sup_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -348,43 +531,20 @@ If `reader_id` is omitted, the server will attempt to auto-discover a Solo termi
 }
 ```
 
-### Example
-
-Send a full configuration update:
+### Example — switch to myPOS
 
 ```
 curl -X POST http://127.0.0.1:8888/config \
   -H "Content-Type: application/json" \
-  -d '{
-    "app": {
-      "mode": "real"
-    },
-    "sumup": {
-      "api_key": "sup_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "merchant_code": "MN2RA8M1",
-      "reader_id": "rdr_6P0860A4S186MV3FHM2Q185AD7"
-    }
-  }'
+  -d @config.mypos.json
 ```
 
-Send only the fields you want to change (partial update):
+### Example — switch to SumUp
 
 ```
 curl -X POST http://127.0.0.1:8888/config \
   -H "Content-Type: application/json" \
-  -d '{
-    "sumup": {
-      "api_key": "sup_sk_new_key_here"
-    }
-  }'
-```
-
-Send from a file:
-
-```
-curl -X POST http://127.0.0.1:8888/config \
-  -H "Content-Type: application/json" \
-  -d @config.json
+  -d @config.sumup.json
 ```
 
 ### Success Response
@@ -392,7 +552,7 @@ curl -X POST http://127.0.0.1:8888/config \
 ```json
 {
   "success": true,
-  "message": "Configuration updated"
+  "terminal_type": "mypos"
 }
 ```
 
@@ -419,7 +579,7 @@ KassaFu API
     |
     | Queue handling
     v
-SumUp Solo Terminal
+Payment terminal (SumUp Solo / myPOS)
     |
     | Payment result
     v

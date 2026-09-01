@@ -1,5 +1,5 @@
 # Business case
-The Python program will handle communication to the POS computer and to the SumUP server. It is located at the POS computer.
+The Python program will handle communication to the POS computer and to the payment terminal servers: **SumUp** and **myPOS**. It is located at the POS computer.
 <img width="632" height="424" alt="image" src="https://github.com/user-attachments/assets/4528b4fc-5068-4148-a87e-8f34c3d88c3e" />
 
 - License: https://github.com/kassaku/kassafu-linux-fastapi/blob/main/LICENSE.md 
@@ -8,9 +8,130 @@ The Python program will handle communication to the POS computer and to the SumU
 - Example: https://github.com/kassaku/kassafu-linux-fastapi/blob/main/test_real_payment.py  
 
 # Restaurant overview
-Payments for payment terminals like SumUp, interface to Angular website as a backend.
-KassaFu — The payment bridge between SumUp terminals and your restaurant system.
+Payments for payment terminals like **SumUp** and **myPOS**, interface to Angular website as a backend.
+KassaFu — The payment bridge between payment terminals (SumUp / myPOS) and your restaurant system.
 <img width="623" height="424" alt="openart-image_1778505829245_5fb4cac4_1778505829356_c09c6fd8" src="https://github.com/user-attachments/assets/68ef0a0a-2006-4fc3-adbe-d1087c6f08e8" />
+
+# Installation
+
+Two installation methods are supported:
+
+### 1. Debian package (recommended)
+
+Build and install a `.deb` package that installs to `/usr/share/kassafu`, creates a venv, sets up the systemd service and starts it:
+
+```bash
+./create_deb          # builds kassafu.deb
+sudo dpkg -i kassafu.deb
+```
+
+The service runs as the installing user (`$SUDO_USER`/`$USER`) and always restarts on boot.
+
+### 2. Manual / development
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 kassafu.py --server
+```
+
+The server listens on `http://127.0.0.1:8888`.
+
+Optional CLI flags (mainly for testing):
+
+```bash
+python3 kassafu.py --server --config config.mypos.json    # seed myPOS config at start
+python3 kassafu.py --server --config config.sumup.json    # seed SumUp config at start
+python3 kassafu.py --server --port 8888
+```
+
+# Configuration
+
+KassaFu starts **unconfigured** and does not decide the terminal type from a default config file. Configuration is pushed at runtime via **`POST /config`** and can be swapped between myPOS and SumUp at any time (hot-swap, in-memory only). The `--config` flag is optional and used for seeding/testing.
+
+### myPOS
+
+```json
+{
+  "app": {"name": "KassaFu", "mode": "mypos"},
+  "mypos": {
+    "gateway_url": "https://api-gateway.mypos.com",
+    "partner": {
+      "client_id": "client_...",
+      "client_secret": "secret_...",
+      "application_id": "mps-app-...",
+      "partner_id": "mps-p-..."
+    },
+    "merchant": {
+      "client_id": "cli_...",
+      "client_secret": "sec_..."
+    },
+    "terminal_id": "80581413"
+  }
+}
+```
+
+### SumUp
+
+```json
+{
+  "app": {"name": "KassaFu", "mode": "sumup"},
+  "sumup": {
+    "api_key": "sup_sk_...",
+    "merchant_code": "MN2RA8M1",
+    "reader_id": "rdr_..."
+  }
+}
+```
+
+### Pushing configuration
+
+```bash
+curl -X POST http://127.0.0.1:8888/config -H "Content-Type: application/json" -d @config.mypos.json
+curl http://127.0.0.1:8888/health        # → "mode": "mypos", "terminal_ready": true
+```
+
+Switching terminal type is also possible on a live server, e.g. swap myPOS → SumUp by posting the SumUp config the same way.
+
+# Supported payment terminals
+
+| Provider | Type | Readers / terminals |
+| --- | --- | --- |
+| SumUp | Cloud API | Solo, Solo Lite, Air, 3G/4G readers |
+| myPOS | ePOS API Gateway | Combo, Mini, Pro, Pad, Virtual |
+
+The active terminal type is resolved from the config section that is sent (`sumup` or `mypos`); the server hot-swaps the implementation on every `POST /config`.
+
+# Testing
+
+Check whether the server is running and the configured terminal is online:
+
+```bash
+python3 test_reader_status_mypos.py     # myPOS terminal status
+python3 test_reader_status_sumup.py     # SumUp terminal status
+```
+
+Run a real €0.10 payment (requires a live/online terminal):
+
+```bash
+python3 test_real_payment.py
+```
+
+# API overview
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /pay` | Start a payment |
+| `GET /payment/status?order_id=...` | Poll payment status |
+| `GET /payment/cancel?order_id=...` | Cancel an active payment |
+| `GET /payment/history` | Last transactions |
+| `GET /health` | Server health + active mode |
+| `GET /reader/status` | Terminal online/ready status |
+| `GET /config` | Current runtime config |
+| `POST /config` | Update config / swap terminal type |
+
+Full documentation: [API.md](API.md)
 
 # Requirements
 
@@ -63,13 +184,15 @@ json
 }
 ```
 
-## R2 - Communicate with SumUp Cloud API
+## R2 - Communicate with SumUp Cloud API (or myPOS ePOS Gateway)
 Detail	Specification
 API base URL	https://api.sumup.com (live) or sandbox
 Authentication	Bearer token (Affiliate Key)
 Endpoint	POST /v0.1/checkouts
 Required fields	amount, currency, description, pay_to_email
 Terminal targeting	Use checkout_reference to route to specific Solo
+
+myPOS alternatively uses the **ePOS API Gateway** (`https://api-gateway.mypos.com`) with partner/merchant OAuth credentials and its own `/payment-initialization`, `/payment-execution` endpoints.
 
 SumUp API call example:
 ```
@@ -113,10 +236,10 @@ def wait_for_payment(checkout_id, timeout=60):
     return {'status': 'timeout'}
 ```
 
-## R4 - Trigger receipt printing on Solo's built-in printer
+## R4 - Trigger receipt printing on terminal's built-in printer
 Detail	Specification
-Method	SumUp API after payment confirmation
-Printer destination	The same Solo terminal that processed payment
+Method	Payment provider API after payment confirmation (SumUp / myPOS)
+Printer destination	The same terminal that processed payment
 Receipt content	Order details, items, total, timestamp, transaction ID
 Format	Plain text + ESC/POS commands for formatting
 
@@ -132,7 +255,7 @@ receipt = {
     "timestamp": datetime.now().isoformat(),
     "transaction_id": transaction_id
 }
-# Send to printer via SumUp's receipt API (if available)
+# Send to printer via SumUp's or myPOS's receipt API (if available)
 # Or print via terminal's local printer using ESC/POS
 ```
 
@@ -169,6 +292,8 @@ Sandbox API URL	https://api.sandbox.sumup.com
 Virtual Solo	https://virtual-solo.sumup.com
 Test card numbers	Provided by SumUp sandbox
 No real money	Transactions are simulated
+
+myPOS offers a demo gateway (`https://demo-api-gateway.mypos.com`) for testing without real money.
 
 Configuration:
 ```
