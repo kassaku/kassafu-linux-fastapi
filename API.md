@@ -1,7 +1,7 @@
 # KassaFu API Documentation
 
 KassaFu is a payment bridge between a POS system and payment terminals (**SumUp** and **myPOS**).
-It exposes a REST API built with FastAPI to process payments, monitor terminal status, and manage configuration.
+It exposes a REST API built with Flask to process payments, monitor terminal status, and manage configuration.
 
 # Table of Contents
 
@@ -30,7 +30,7 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
 
 # Features
 
-* FastAPI-powered REST API
+* Flask-powered REST API
 * Queue-based payment handling
 * SumUp Solo integration
 * myPOS ePOS Gateway integration
@@ -44,8 +44,8 @@ It exposes a REST API built with FastAPI to process payments, monitor terminal s
 # Requirements
 
 * Python 3.10+
-* FastAPI
-* Uvicorn
+* Flask
+* Waitress
 * SumUp Solo terminal or myPOS terminal
 * Valid SumUp or myPOS API credentials
 

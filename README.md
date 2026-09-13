@@ -103,6 +103,12 @@ Switching terminal type is also possible on a live server, e.g. swap myPOS → S
 
 The active terminal type is resolved from the config section that is sent (`sumup` or `mypos`); the server hot-swaps the implementation on every `POST /config`.
 
+> Note: An earlier CCV Cloud Connect handler (`ccv.py`) was an unused shell and
+> has been removed. To add a terminal back: implement one module exposing the
+> terminal interface (`init`, `process_payment`, `check_status`, `get_config`,
+> `is_ready`, ...) and add a `TERMINAL_CLASSES` entry keyed by its config
+> section name; the server auto-detects it from the pushed config.
+
 # Testing
 
 Check whether the server is running and the configured terminal is online:
