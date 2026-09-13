@@ -84,6 +84,8 @@ def decrypt_blob(blob: bytes, key: str) -> bytes:
     salt = blob[pos:pos + SALT_LENGTH]
     pos += SALT_LENGTH
     iterations = int.from_bytes(blob[pos:pos + 4], "big")
+    if iterations > PBKDF2_ITERATIONS * 10:
+        raise PartnerConfigError("Blob has unreasonable PBKDF2 iteration count")
     pos += 4
     nonce = blob[pos:pos + NONCE_LENGTH]
     pos += NONCE_LENGTH
@@ -107,6 +109,9 @@ def parse_partner(plaintext: bytes) -> dict:
         data = json.loads(plaintext.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as exc:
         raise PartnerConfigError(f"Partner payload is not valid JSON: {exc}")
+
+    if not isinstance(data, dict):
+        raise PartnerConfigError("Partner payload is not a JSON object")
 
     partner = data.get("partner")
     if not isinstance(partner, dict):

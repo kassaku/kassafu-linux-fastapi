@@ -80,6 +80,14 @@ class ParsePartnerTests(unittest.TestCase):
         with self.assertRaises(PartnerConfigError):
             parse_partner(b'{"app": {"name": "KassaFu"}}')
 
+    def test_rejects_non_dict_top_level(self):
+        with self.assertRaises(PartnerConfigError):
+            parse_partner(b"[1,2,3]")
+
+    def test_rejects_invalid_utf8(self):
+        with self.assertRaises(PartnerConfigError):
+            parse_partner(b"\xff\xfe")
+
 
 class FetchPartnerTests(unittest.TestCase):
     def test_fetches_and_caches(self):
