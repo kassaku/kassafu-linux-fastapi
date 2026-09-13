@@ -18,7 +18,14 @@ class AsyncBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bridge.run(boom())
 
-    def test_call_in_loop_binds_asyncio_objects_to_bridge_loop(self):
+    def test_call_in_loop_runs_sync_callable_on_bridge_loop(self):
+        async def capture_loop():
+            return asyncio.get_running_loop()
+
+        bridge_loop = bridge.run(capture_loop())
+        loop_in_call = bridge.call_in_loop(asyncio.get_running_loop)
+        self.assertIs(loop_in_call, bridge_loop)
+
         queue = bridge.call_in_loop(asyncio.Queue)
 
         async def put_get():

@@ -11,7 +11,12 @@ import threading
 
 
 class AsyncBridge:
-    """Owns one background asyncio event loop thread."""
+    """Owns one background asyncio event loop thread.
+
+    run, create_task and call_in_loop must not be called from code already
+    executing on the loop thread (e.g. inside a call_in_loop callable), since
+    the caller then blocks forever on a loop that is busy.
+    """
 
     def __init__(self):
         self._loop = None
