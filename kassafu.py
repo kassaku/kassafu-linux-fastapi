@@ -30,6 +30,7 @@ import logging
 from typing import Optional
 
 from flask import Flask, request
+from werkzeug.exceptions import HTTPException
 from waitress import serve
 
 from asyncio_bridge import bridge
@@ -133,6 +134,26 @@ def _apply_runtime_config(new_config: dict):
     return True, term_type
 
 
+async def _apply_config_atomic(new_config: dict):
+    """Check for an active payment and hot-swap the terminal in one loop turn.
+
+    Kept on the bridge loop with no await between the guard and the swap so a
+    concurrent payment cannot interleave the two, matching FastAPI's atomicity.
+    """
+    if active_payment:
+        return {
+            "success": False,
+            "message": "Payment in progress, configuration rejected",
+            "error_code": 108012,
+        }, 409
+
+    ok, detail = _apply_runtime_config(new_config)
+    if not ok:
+        return {"detail": detail}, 400
+
+    return {"success": True, "terminal_type": detail}, 200
+
+
 TERMINAL_TYPE = "sumup"
 
 
@@ -152,6 +173,14 @@ async def _maybe_discover(term, terminal_type: str):
 
 app = Flask(__name__)
 app.json.ensure_ascii = False
+
+
+@app.errorhandler(Exception)
+def _handle_unhandled_exception(exc):
+    if isinstance(exc, HTTPException):
+        return exc
+    logger.exception("Unhandled exception serving request")
+    return {"detail": "Internal server error"}, 500
 
 
 def _startup():
@@ -178,11 +207,6 @@ def _startup():
 
     payment_queue = bridge.call_in_loop(asyncio.Queue)
     bridge.create_task(process_payment_queue())
-
-
-def _is_active_payment() -> bool:
-    """True while the queue consumer is processing a payment (loop thread)."""
-    return active_payment
 
 
 async def process_payment_queue():
@@ -458,28 +482,16 @@ def get_config():
 @app.post("/config")
 def update_config():
     """Replace runtime configuration and hot-swap the terminal (in-memory only)"""
-    if bridge.call_in_loop(_is_active_payment):
-        return (
-            {
-                "success": False,
-                "message": "Payment in progress, configuration rejected",
-                "error_code": 108012,
-            },
-            409,
-        )
-
     new_config = request.get_json(silent=True)
+    body, status = bridge.run(_apply_config_atomic(new_config))
 
-    ok, detail = bridge.call_in_loop(_apply_runtime_config, new_config)
-    if not ok:
-        return {"detail": detail}, 400
+    if status == 200:
+        try:
+            bridge.run(_maybe_discover(terminal, TERMINAL_TYPE))
+        except Exception as exc:  # discovery problems must not fail an applied config
+            logger.warning(f"Post-swap discovery failed: {exc}")
 
-    try:
-        bridge.run(_maybe_discover(terminal, TERMINAL_TYPE))
-    except Exception as exc:  # discovery problems must not fail an applied config
-        logger.warning(f"Post-swap discovery failed: {exc}")
-
-    return {"success": True, "terminal_type": detail}
+    return body, status
 
 
 if __name__ == "__main__":

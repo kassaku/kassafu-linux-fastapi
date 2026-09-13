@@ -1,6 +1,7 @@
 import asyncio
 import os
 import tempfile
+import time
 import unittest
 
 import kassafu
@@ -36,8 +37,12 @@ class FakeTerminal:
         self.current_status = None
         self.current_card_scheme = None
         self.current_card_last_4 = None
+        self.transaction_status = "PENDING"
+        self.payments = []
+        self.logged_status_updates = []
 
     async def process_payment(self, order_id, amount_cents, currency="EUR"):
+        self.payments.append(order_id)
         return {"success": True, "status": "pending", "order_id": order_id, "error_code": 0}
 
     async def cancel_payment(self, order_id):
@@ -47,10 +52,13 @@ class FakeTerminal:
         pass
 
     async def check_status(self):
-        return {"status": "online", "reader_id": self.reader_id, "error_code": 0}
+        return {"online": True, "ready": True, "reader_id": self.reader_id, "error_code": 0}
 
     async def get_transaction_status(self, transaction_id):
-        return "PENDING"
+        return self.transaction_status
+
+    def _log_status_update(self, order_id, transaction_id, status, message=""):
+        self.logged_status_updates.append((order_id, transaction_id, status))
 
     def get_config(self):
         return {
@@ -143,6 +151,54 @@ class PaymentStatusEndpointTests(unittest.TestCase):
         self.assertEqual(body["status"], "not_found")
         self.assertEqual(body["error_code"], 108002)
 
+    def test_poll_returns_paid_when_transaction_successful(self):
+        term = FakeTerminal()
+        term.current_order_id = "O1"
+        term.current_transaction_id = "T1"
+        term.current_status = "pending"
+        term.current_amount_cents = 1000
+        term.current_currency = "EUR"
+        term.current_card_scheme = "visa"
+        term.current_card_last_4 = "4242"
+        term.transaction_status = "SUCCESSFUL"
+        kassafu.terminal = term
+        r = self.client.get("/payment/status?order_id=O1")
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertEqual(body["status"], "paid")
+        self.assertEqual(body["amount"], 10.0)
+        self.assertEqual(body["card_scheme"], "visa")
+        self.assertEqual(body["card_last_4"], "4242")
+        self.assertEqual(body["error_code"], 0)
+        self.assertIn(("O1", "T1", "paid"), term.logged_status_updates)
+
+    def test_poll_returns_failed_when_transaction_failed(self):
+        term = FakeTerminal()
+        term.current_order_id = "O1"
+        term.current_transaction_id = "T1"
+        term.current_status = "pending"
+        term.current_amount_cents = 1000
+        term.current_currency = "EUR"
+        term.transaction_status = "FAILED"
+        kassafu.terminal = term
+        r = self.client.get("/payment/status?order_id=O1")
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertEqual(body["status"], "failed")
+        self.assertEqual(body["error_code"], 108009)
+        self.assertIn(("O1", "T1", "failed"), term.logged_status_updates)
+
+    def test_queued_payment_processed_by_consumer(self):
+        term = FakeTerminal()
+        kassafu.terminal = term
+        consumer = bridge.create_task(kassafu.process_payment_queue())
+        bridge.run(kassafu.payment_queue.put({"order_id": "Q1", "amount_cents": 500, "currency": "EUR"}))
+        deadline = time.time() + 5
+        while time.time() < deadline and not term.payments:
+            time.sleep(0.01)
+        consumer.cancel()
+        self.assertEqual(term.payments, ["Q1"])
+
 
 class CancelEndpointTests(unittest.TestCase):
     def setUp(self):
@@ -219,7 +275,9 @@ class HealthAndMiscEndpointTests(unittest.TestCase):
         kassafu.terminal = FakeTerminal()
         r = self.client.get("/reader/status")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.get_json()["status"], "online")
+        body = r.get_json()
+        self.assertTrue(body["online"])
+        self.assertTrue(body["ready"])
 
     def test_payment_history_reads_log(self):
         kassafu.terminal = FakeTerminal()
