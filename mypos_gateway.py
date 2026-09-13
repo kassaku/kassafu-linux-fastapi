@@ -70,8 +70,8 @@ class MyPOSGateway:
         self.merchant_client_secret = merchant.get("client_secret", "")
         self._transport = transport
 
-        self._integration_token = None
-        self._integration_token_expires = None
+        self._partner_token = None
+        self._partner_token_expires = None
         self._session = None
         self._session_expires = None
         self._token_lock = asyncio.Lock()
@@ -96,16 +96,16 @@ class MyPOSGateway:
         body = response.text[:500] if response.content else ""
         logger.info(f"<-- HTTP {response.status_code} {response.request.url} [{headers}] {body}")
 
-    async def _get_integration_token(self) -> str:
+    async def _get_partner_token(self) -> str:
         async with self._token_lock:
             now = datetime.now(timezone.utc)
-            if self._integration_token and self._integration_token_expires and now < self._integration_token_expires:
-                return self._integration_token
-            token = await self._request_integration_token()
-            self._integration_token = token
+            if self._partner_token and self._partner_token_expires and now < self._partner_token_expires:
+                return self._partner_token
+            token = await self._request_partner_token()
+            self._partner_token = token
             return token
 
-    async def _request_integration_token(self) -> str:
+    async def _request_partner_token(self) -> str:
         url = f"{self.gateway_url}/api/v1/oauth/token"
         try:
             async with self._new_client() as client:
@@ -131,12 +131,12 @@ class MyPOSGateway:
             if not access_token:
                 raise MyPOSGatewayError(response.status_code, 'Token response missing "access_token"')
             expires_in = data.get("expires_in", 3600)
-            self._integration_token_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 60))
+            self._partner_token_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 60))
             return access_token
         raise MyPOSGatewayError(response.status_code, f"Token request failed: HTTP {response.status_code}: {response.text[:200]}")
 
     async def _get_session(self) -> str:
-        token = await self._get_integration_token()
+        token = await self._get_partner_token()
         async with self._session_lock:
             now = datetime.now(timezone.utc)
             if self._session and self._session_expires and now < self._session_expires:
@@ -178,20 +178,20 @@ class MyPOSGateway:
         if response.status_code == 400:
             detail += (
                 "\nHint: check that 'mypos.merchant.client_id' (cli_*) and"
-                " 'mypos.merchant.client_secret' (sec_*) are valid integration"
+                " 'mypos.merchant.client_secret' (sec_*) are valid partner"
                 " merchant credentials from the Partners Portal."
             )
         raise MyPOSGatewayError(response.status_code, detail)
 
     def _invalidate_tokens(self):
-        self._integration_token = None
-        self._integration_token_expires = None
+        self._partner_token = None
+        self._partner_token_expires = None
         self._session = None
         self._session_expires = None
 
     async def request(self, method: str, path: str, body: dict = None, params: dict = None) -> dict:
         for attempt in range(2):
-            token = await self._get_integration_token()
+            token = await self._get_partner_token()
             session = await self._get_session()
             headers = {
                 "Authorization": f"Bearer {token}",

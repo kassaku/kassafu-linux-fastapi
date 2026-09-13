@@ -1,5 +1,5 @@
 """
-myPOS Terminal Handler - ePOS API Gateway integration for KassaFu
+myPOS Terminal Handler - ePOS API Gateway partner for KassaFu
 
 Copyright (c) 2026 Houkes Horeca Applications
 

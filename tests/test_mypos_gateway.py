@@ -11,8 +11,8 @@ from mypos_gateway import MyPOSGateway, MyPOSGatewayError, _mask_secrets
 CONFIG = {
     "gateway_url": "https://demo-api-gateway.mypos.com",
     "partner": {
-        "client_id": "client_integration",
-        "client_secret": "secret_integration",
+        "client_id": "client_partner",
+        "client_secret": "secret_partner",
         "application_id": "mps-app-test",
         "partner_id": "mps-p-test",
     },
@@ -25,62 +25,62 @@ def make_gateway(handler):
     return MyPOSGateway(CONFIG, transport=httpx.MockTransport(handler))
 
 
-class IntegrationTokenTests(unittest.TestCase):
-    def test_fetches_integration_token(self):
+class PartnerTokenTests(unittest.TestCase):
+    def test_fetches_partner_token(self):
         async def scenario():
             def handler(request):
                 body = request.read().decode()
                 self.assertEqual(request.url.path, "/api/v1/oauth/token")
                 self.assertEqual(request.headers["content-type"], "application/x-www-form-urlencoded")
                 self.assertIn("grant_type=client_credentials", body)
-                self.assertIn("client_id=client_integration", body)
-                return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                self.assertIn("client_id=client_partner", body)
+                return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
 
             gateway = make_gateway(handler)
-            token = await gateway._get_integration_token()
+            token = await gateway._get_partner_token()
             return token
 
-        self.assertEqual(asyncio.run(scenario()), "tok_integration")
+        self.assertEqual(asyncio.run(scenario()), "tok_partner")
 
-    def test_integration_token_cached(self):
+    def test_partner_token_cached(self):
         async def scenario():
             calls = []
 
             def handler(request):
                 calls.append(1)
-                return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
 
             gateway = make_gateway(handler)
-            await gateway._get_integration_token()
-            await gateway._get_integration_token()
+            await gateway._get_partner_token()
+            await gateway._get_partner_token()
             return len(calls)
 
         self.assertEqual(asyncio.run(scenario()), 1)
 
-    def test_integration_token_refreshes_after_expiry(self):
+    def test_partner_token_refreshes_after_expiry(self):
         async def scenario():
             calls = []
 
             def handler(request):
                 calls.append(1)
-                return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
 
             gateway = make_gateway(handler)
-            await gateway._get_integration_token()
-            gateway._integration_token_expires = datetime(2000, 1, 1, tzinfo=timezone.utc)
-            await gateway._get_integration_token()
+            await gateway._get_partner_token()
+            gateway._partner_token_expires = datetime(2000, 1, 1, tzinfo=timezone.utc)
+            await gateway._get_partner_token()
             return len(calls)
 
         self.assertEqual(asyncio.run(scenario()), 2)
 
-    def test_integration_token_error_raises(self):
+    def test_partner_token_error_raises(self):
         async def scenario():
             def handler(request):
                 return httpx.Response(500, text="boom")
 
             gateway = make_gateway(handler)
             with self.assertRaises(MyPOSGatewayError) as ctx:
-                await gateway._get_integration_token()
+                await gateway._get_partner_token()
             return ctx.exception.status
 
         self.assertEqual(asyncio.run(scenario()), 500)
@@ -94,9 +94,9 @@ class SessionTests(unittest.TestCase):
             def handler(request):
                 seen.append(request.url.path)
                 if request.url.path == "/api/v1/oauth/token":
-                    return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                    return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
                 self.assertEqual(request.url.path, "/api/v1/auth/session")
-                self.assertEqual(request.headers["authorization"], "Bearer tok_integration")
+                self.assertEqual(request.headers["authorization"], "Bearer tok_partner")
                 body = request.read().decode()
                 self.assertIn('"client_id": "cli_merchant"', body)
                 self.assertIn('"client_secret": "sec_merchant"', body)
@@ -117,7 +117,7 @@ class SessionTests(unittest.TestCase):
             def handler(request):
                 calls.append(request.url.path)
                 if request.url.path == "/api/v1/oauth/token":
-                    return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                    return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
                 return httpx.Response(200, json={"session": "session_abc", "expires_in": 360})
 
             gateway = make_gateway(handler)
@@ -139,7 +139,7 @@ class RequestTests(unittest.TestCase):
                 captured["headers"] = dict(request.headers)
                 captured["body"] = request.read().decode()
                 if request.url.path == "/api/v1/oauth/token":
-                    return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                    return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
                 if request.url.path == "/api/v1/auth/session":
                     return httpx.Response(200, json={"session": "session_abc", "expires_in": 360})
                 return httpx.Response(201, json={"payment_id": "pay_123", "status": "InProgress"})
@@ -157,7 +157,7 @@ class RequestTests(unittest.TestCase):
         response, captured = asyncio.run(scenario())
         self.assertEqual(response["payment_id"], "pay_123")
         self.assertEqual(captured["url"], "https://demo-api-gateway.mypos.com/epos/v1/payments")
-        self.assertEqual(captured["headers"]["authorization"], "Bearer tok_integration")
+        self.assertEqual(captured["headers"]["authorization"], "Bearer tok_partner")
         self.assertEqual(captured["headers"]["x-session"], "session_abc")
         self.assertEqual(captured["headers"]["x-partner-id"], "mps-p-test")
         self.assertEqual(captured["headers"]["x-application-id"], "mps-app-test")
@@ -169,7 +169,7 @@ class RequestTests(unittest.TestCase):
 
             def handler(request):
                 if request.url.path == "/api/v1/oauth/token":
-                    return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                    return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
                 if request.url.path == "/api/v1/auth/session":
                     return httpx.Response(200, json={"session": "session_abc", "expires_in": 360})
                 state["payment_attempts"] += 1
@@ -243,38 +243,38 @@ class RequestTests(unittest.TestCase):
 
 class HttpDebugLoggingTests(unittest.TestCase):
     def test_mask_secrets_hides_all_credential_forms(self):
-        form = "grant_type=client_credentials&client_id=client_integration&client_secret=secret_integration"
+        form = "grant_type=client_credentials&client_id=client_partner&client_secret=secret_partner"
         masked = _mask_secrets(form)
-        self.assertNotIn("secret_integration", masked)
+        self.assertNotIn("secret_partner", masked)
         self.assertIn("client_secret=***", masked)
-        self.assertIn("client_id=client_integration", masked)
+        self.assertIn("client_id=client_partner", masked)
 
         js = '{"client_id": "cli_merchant", "client_secret": "sec_merchant"}'
         masked = _mask_secrets(js)
         self.assertNotIn("sec_merchant", masked)
         self.assertIn('"client_id": "cli_merchant"', masked)
 
-        token_body = '{"access_token": "tok_integration", "expires_in": 3600}'
-        self.assertNotIn("tok_integration", _mask_secrets(token_body))
+        token_body = '{"access_token": "tok_partner", "expires_in": 3600}'
+        self.assertNotIn("tok_partner", _mask_secrets(token_body))
 
     def test_debug_hook_logs_masked_traffic_when_enabled(self):
         async def scenario():
             def handler(request):
-                return httpx.Response(200, json={"access_token": "tok_integration", "expires_in": 3600})
+                return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
 
             gateway = make_gateway(handler)
             with self.assertLogs("mypos_gateway", level="INFO") as captured:
-                await gateway._get_integration_token()
+                await gateway._get_partner_token()
             return "\n".join(captured.output)
 
         with mock.patch.dict(os.environ, {"KASSAFU_HTTP_DEBUG": "1"}):
             log = asyncio.run(scenario())
 
         self.assertIn("--> POST https://demo-api-gateway.mypos.com/api/v1/oauth/token", log)
-        self.assertIn("client_secret=secret_integration", log)
+        self.assertIn("client_secret=secret_partner", log)
         self.assertIn("content-type: application/x-www-form-urlencoded", log)
         self.assertIn("<-- HTTP 200", log)
-        self.assertIn("tok_integration", log)
+        self.assertIn("tok_partner", log)
 
     def test_logging_disabled_by_default(self):
         async def scenario():
@@ -284,7 +284,7 @@ class HttpDebugLoggingTests(unittest.TestCase):
             gateway = make_gateway(handler)
             try:
                 with self.assertLogs("mypos_gateway", level="INFO") as captured:
-                    await gateway._get_integration_token()
+                    await gateway._get_partner_token()
             except AssertionError:
                 return ""
             return "\n".join(captured.output)

@@ -9,8 +9,8 @@ CONFIG = {
     "mypos": {
         "gateway_url": "https://demo-api-gateway.mypos.com",
         "partner": {
-            "client_id": "client_integration",
-            "client_secret": "secret_integration",
+            "client_id": "client_partner",
+            "client_secret": "secret_partner",
             "application_id": "mps-app-test",
             "partner_id": "mps-p-test",
         },
