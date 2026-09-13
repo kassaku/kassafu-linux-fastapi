@@ -28,12 +28,11 @@ import json
 import sys
 import logging
 from typing import Optional
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-import uvicorn
+from flask import Flask, request
+from waitress import serve
 
+from asyncio_bridge import bridge
 from sumup_terminal import SumUpTerminal
 from mypos_terminal import MyPOSTerminal
 
@@ -72,7 +71,7 @@ config = {}
 PORT = 8888
 
 terminal: Optional[object] = None
-payment_queue = asyncio.Queue()
+payment_queue = None
 active_payment = False
 
 
@@ -151,31 +150,39 @@ async def _maybe_discover(term, terminal_type: str):
             await term.discover_reader()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global terminal, TERMINAL_TYPE
+app = Flask(__name__)
+app.json.ensure_ascii = False
+
+
+def _startup():
+    """Initialize the terminal, payment queue and queue consumer.
+
+    Runs once before the WSGI server starts serving. Terminal init and the
+    queue consumer run on the bridge loop, exactly as they did on FastAPI's
+    single event loop.
+    """
+    global terminal, TERMINAL_TYPE, payment_queue
 
     if any(name in config for name in TERMINAL_CLASSES):
         TERMINAL_TYPE = _resolve_terminal_type(config)
         logger.info(f"KassaFu starting with terminal type '{TERMINAL_TYPE}' on port {PORT}")
 
         candidate = _get_terminal_class(TERMINAL_TYPE)()
-        if not candidate.init(config):
+        if not bridge.call_in_loop(candidate.init, config):
             logger.error(f"Failed to initialize {TERMINAL_TYPE} terminal - continuing unconfigured")
         else:
             terminal = candidate
-            await _maybe_discover(terminal, TERMINAL_TYPE)
+            bridge.run(_maybe_discover(terminal, TERMINAL_TYPE))
     else:
         logger.info("KassaFu started without configuration - waiting for POST /config")
 
-    asyncio.create_task(process_payment_queue())
-
-    yield
-
-    logger.info("KassaFu shutting down")
+    payment_queue = bridge.call_in_loop(asyncio.Queue)
+    bridge.create_task(process_payment_queue())
 
 
-app = FastAPI(lifespan=lifespan)
+def _is_active_payment() -> bool:
+    """True while the queue consumer is processing a payment (loop thread)."""
+    return active_payment
 
 
 async def process_payment_queue():
@@ -199,47 +206,60 @@ async def process_payment_queue():
             payment_queue.task_done()
 
 
-@app.post("/pay")
-async def pay(payment_data: dict):
-    """Accept payment request from POS"""
+async def _handle_pay(payment_data: dict):
+    """Async payment handling: queue behind an active payment or process now.
+
+    Runs on the bridge loop so active_payment and payment_queue stay confined
+    to the loop thread, exactly as they were under FastAPI.
+    """
     global active_payment, terminal
-
-    required = ['order_id', 'amount_cents', 'currency']
-    for field in required:
-        if field not in payment_data:
-            raise HTTPException(status_code=400, detail=f"Missing field: {field}")
-
-    if not terminal or not terminal.is_ready:
-        raise HTTPException(status_code=503, detail="Terminal not ready")
 
     if active_payment:
         logger.info(f"Queueing payment for {payment_data['order_id']}")
         await payment_queue.put(payment_data)
-        return JSONResponse(
-            status_code=202,
-            content={
+        return (
+            {
                 "success": False,
                 "status": "queued",
                 "message": "Payment in progress, request queued",
-                "error_code": 108012
-            }
+                "error_code": 108012,
+            },
+            202,
         )
 
     result = await terminal.process_payment(
         order_id=payment_data['order_id'],
         amount_cents=payment_data['amount_cents'],
-        currency=payment_data.get('currency', 'EUR')
+        currency=payment_data.get('currency', 'EUR'),
     )
+    return result, 200
 
-    return result
+
+@app.post("/pay")
+def pay():
+    """Accept payment request from POS"""
+    payment_data = request.get_json(silent=True)
+    if not isinstance(payment_data, dict):
+        payment_data = {}
+
+    required = ['order_id', 'amount_cents', 'currency']
+    for field in required:
+        if field not in payment_data:
+            return {"detail": f"Missing field: {field}"}, 400
+
+    if not terminal or not terminal.is_ready:
+        return {"detail": "Terminal not ready"}, 503
+
+    return bridge.run(_handle_pay(payment_data))
 
 
 TRANSACTION_LOG = "transactions.log"
 
 
 @app.get("/payment/history")
-async def get_payment_history(limit: int = 20):
+def get_payment_history():
     """Return the last N transactions from the transaction log"""
+    limit = request.args.get("limit", default=20, type=int)
     try:
         with open(TRANSACTION_LOG, 'r') as f:
             lines = f.readlines()
@@ -262,33 +282,26 @@ async def get_payment_history(limit: int = 20):
     return {"items": entries, "error_code": 0}
 
 
-@app.get("/payment/status")
-async def get_payment_status(order_id: str):
-    """
-    Get payment status for an order.
-    POS calls this every few seconds to check if payment is complete.
-    """
+async def _payment_status(order_id: str):
+    """Get payment status for an order (runs on the bridge loop)."""
     global terminal
 
     if not terminal:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "error", "message": "Terminal not ready", "error_code": 108008}
-        )
+        return {"status": "error", "message": "Terminal not ready", "error_code": 108008}, 503
 
     if not terminal.current_order_id:
         return {
             "status": "idle",
             "message": "No active payment",
-            "error_code": 0
-        }
+            "error_code": 0,
+        }, 200
 
     if terminal.current_order_id != order_id:
         return {
             "status": "not_found",
             "message": f"No payment found for order {order_id}",
-            "error_code": 108002
-        }
+            "error_code": 108002,
+        }, 200
 
     if terminal.current_status in ["paid", "failed", "cancelled"]:
         return {
@@ -299,8 +312,8 @@ async def get_payment_status(order_id: str):
             "card_scheme": terminal.current_card_scheme,
             "card_last_4": terminal.current_card_last_4,
             "message": "Payment completed" if terminal.current_status == "paid" else "Payment failed",
-            "error_code": 0 if terminal.current_status == "paid" else 108009
-        }
+            "error_code": 0 if terminal.current_status == "paid" else 108009,
+        }, 200
 
     if terminal.current_transaction_id:
         transaction_status = await terminal.get_transaction_status(terminal.current_transaction_id)
@@ -317,8 +330,8 @@ async def get_payment_status(order_id: str):
                 "card_scheme": terminal.current_card_scheme,
                 "card_last_4": terminal.current_card_last_4,
                 "message": "Payment completed successfully",
-                "error_code": 0
-            }
+                "error_code": 0,
+            }, 200
 
         elif transaction_status in ["FAILED", "CANCELLED"]:
             terminal.current_status = "failed"
@@ -333,8 +346,8 @@ async def get_payment_status(order_id: str):
                 "amount": terminal.current_amount_cents / 100,
                 "currency": terminal.current_currency,
                 "message": error_message,
-                "error_code": 108009
-            }
+                "error_code": 108009,
+            }, 200
 
         else:
             return {
@@ -342,27 +355,37 @@ async def get_payment_status(order_id: str):
                 "order_id": terminal.current_order_id,
                 "amount": terminal.current_amount_cents / 100,
                 "currency": terminal.current_currency,
-                "error_code": 0
-            }
+                "error_code": 0,
+            }, 200
 
     return {
         "status": "pending",
         "order_id": terminal.current_order_id,
         "amount": terminal.current_amount_cents / 100,
         "currency": terminal.current_currency,
-        "error_code": 0
-    }
+        "error_code": 0,
+    }, 200
 
 
-@app.api_route("/payment/cancel", methods=["GET", "DELETE"])
-async def cancel_payment(order_id: str):
+@app.get("/payment/status")
+def get_payment_status():
+    """
+    Get payment status for an order.
+    POS calls this every few seconds to check if payment is complete.
+    """
+    order_id = request.args.get("order_id", "")
+    return bridge.run(_payment_status(order_id))
+
+
+async def _cancel_payment(order_id: str):
+    """Cancel an active payment (runs on the bridge loop)."""
     global terminal
 
     if not terminal:
-        return JSONResponse(status_code=503, content={"status": "error", "message": "Terminal not ready", "error_code": 108008})
+        return {"status": "error", "message": "Terminal not ready", "error_code": 108008}, 503
 
     if not order_id:
-        raise HTTPException(status_code=400, detail="Missing order_id query parameter")
+        return {"detail": "Missing order_id query parameter"}, 400
 
     result = await terminal.cancel_payment(order_id)
 
@@ -370,14 +393,20 @@ async def cancel_payment(order_id: str):
         await terminal.clear_display()
 
     if not result.get("success"):
-        return JSONResponse(status_code=404 if result.get("status") == "not_found" else 200, content=result)
+        return result, (404 if result.get("status") == "not_found" else 200)
 
     logger.info(f"Payment for order {order_id} cancelled via API")
-    return result
+    return result, 200
+
+
+@app.route("/payment/cancel", methods=["GET", "DELETE"])
+def cancel_payment():
+    order_id = request.args.get("order_id", "")
+    return bridge.run(_cancel_payment(order_id))
 
 
 @app.get("/health")
-async def health():
+def health():
     """Health check endpoint"""
     if not terminal:
         return {
@@ -396,7 +425,7 @@ async def health():
 
 
 @app.get("/reader/status")
-async def get_reader_status():
+def get_reader_status():
     """Check if the terminal is online and ready"""
     if not terminal:
         return {
@@ -413,12 +442,11 @@ async def get_reader_status():
             "error_code": 108010
         }
 
-    status = await terminal.check_status()
-    return status
+    return bridge.run(terminal.check_status())
 
 
 @app.get("/config")
-async def get_config():
+def get_config():
     """Return the current runtime configuration (API key excluded)"""
     if not terminal:
         return {"app": {"mode": TERMINAL_TYPE}}
@@ -428,24 +456,26 @@ async def get_config():
 
 
 @app.post("/config")
-async def update_config(new_config: dict):
+def update_config():
     """Replace runtime configuration and hot-swap the terminal (in-memory only)"""
-    if active_payment:
-        return JSONResponse(
-            status_code=409,
-            content={
+    if bridge.call_in_loop(_is_active_payment):
+        return (
+            {
                 "success": False,
                 "message": "Payment in progress, configuration rejected",
                 "error_code": 108012,
             },
+            409,
         )
 
-    ok, detail = _apply_runtime_config(new_config)
+    new_config = request.get_json(silent=True)
+
+    ok, detail = bridge.call_in_loop(_apply_runtime_config, new_config)
     if not ok:
-        raise HTTPException(status_code=400, detail=detail)
+        return {"detail": detail}, 400
 
     try:
-        await _maybe_discover(terminal, TERMINAL_TYPE)
+        bridge.run(_maybe_discover(terminal, TERMINAL_TYPE))
     except Exception as exc:  # discovery problems must not fail an applied config
         logger.warning(f"Post-swap discovery failed: {exc}")
 
@@ -472,7 +502,8 @@ if __name__ == "__main__":
     port = args.port if args.port else 8888
 
     if args.server:
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+        _startup()
+        serve(app, host="127.0.0.1", port=port)
     else:
         print("Usage: python3 kassafu.py --server")
         print("Optional: --config /path/to/config.json")
