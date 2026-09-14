@@ -224,3 +224,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Partner encryption blob + plaintext (never committed)
+config.partner.json
+partner.xml.enc
+partner.xml.enc.*
