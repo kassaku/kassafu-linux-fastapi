@@ -36,6 +36,11 @@ from waitress import serve
 from asyncio_bridge import bridge
 from sumup_terminal import SumUpTerminal
 from mypos_terminal import MyPOSTerminal
+from encrypt_partner import (
+    PARTNER_URL_DEFAULT,
+    PartnerConfigError,
+    fetch_partner,
+)
 
 TERMINAL_CLASSES = {
     "sumup": SumUpTerminal,
@@ -75,6 +80,9 @@ terminal: Optional[object] = None
 payment_queue = None
 active_payment = False
 
+KASSAFU_PARTNER_KEY = None
+PARTNER_CACHE_DEFAULT = "partner.xml.enc"
+
 
 def _get_terminal_class(terminal_type: str):
     t = terminal_type.lower()
@@ -104,6 +112,32 @@ def _resolve_terminal_type(cfg: dict) -> str:
     elif not has_sumup:
         logger.warning("No 'sumup' or 'mypos' section found, defaulting to sumup")
     return "sumup"
+
+
+def _merge_partner(cfg: dict) -> dict:
+    """Fetch + decrypt + inject the myPOS partner credentials into a copy of cfg.
+
+    Non-myPOS configs pass through unchanged. Raises PartnerConfigError when
+    the partner blob cannot be fetched/decrypted or no key is available.
+    """
+    if not isinstance(cfg, dict) or _resolve_terminal_type(cfg) != "mypos":
+        return cfg
+
+    mypos = cfg.get("mypos", {})
+    partner_url = mypos.get("partner_url") or PARTNER_URL_DEFAULT
+    partner_key = mypos.get("partner_key") or KASSAFU_PARTNER_KEY
+    if not partner_key:
+        raise PartnerConfigError(
+            "Missing partner encryption key (set mypos.partner_key or pass --key)"
+        )
+
+    cache_path = mypos.get("partner_cache") or PARTNER_CACHE_DEFAULT
+    partner = fetch_partner(partner_url, partner_key, cache_path)
+
+    merged = dict(cfg)
+    merged["mypos"] = dict(mypos)
+    merged["mypos"]["partner"] = partner
+    return merged
 
 
 def _apply_runtime_config(new_config: dict):

@@ -1,7 +1,10 @@
 import unittest
+from copy import deepcopy
+from unittest import mock
 
 import kassafu
-from kassafu import _apply_runtime_config, _resolve_terminal_type
+from encrypt_partner import PARTNER_URL_DEFAULT, PartnerConfigError
+from kassafu import _apply_runtime_config, _merge_partner, _resolve_terminal_type
 from mypos_terminal import MyPOSTerminal
 from sumup_terminal import SumUpTerminal
 
@@ -117,6 +120,71 @@ class ApplyRuntimeConfigTests(unittest.TestCase):
         ok, detail = _apply_runtime_config("nope")
         self.assertFalse(ok)
         self.assertIn("JSON object", detail)
+
+
+MYPOS_CONFIG_NO_PARTNER = {
+    "mypos": {
+        "gateway_url": "https://demo-api-gateway.mypos.com",
+        "partner_url": "http://example.test/partner.xml",
+        "partner_key": "test-key",
+        "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
+        "terminal_id": "80026232",
+    }
+}
+
+FAKE_PARTNER = {
+    "client_id": "ci",
+    "client_secret": "cs",
+    "application_id": "app",
+    "partner_id": "pi",
+}
+
+
+class MergePartnerTests(unittest.TestCase):
+    def setUp(self):
+        self._saved_key = kassafu.KASSAFU_PARTNER_KEY
+        kassafu.KASSAFU_PARTNER_KEY = None
+
+    def tearDown(self):
+        kassafu.KASSAFU_PARTNER_KEY = self._saved_key
+
+    def test_non_mypos_returns_same_object(self):
+        cfg = SUMUP_CONFIG
+        self.assertIs(_merge_partner(cfg), cfg)
+
+    def test_injects_fetched_partner(self):
+        cfg = deepcopy(MYPOS_CONFIG_NO_PARTNER)
+        with mock.patch("kassafu.fetch_partner", return_value=FAKE_PARTNER) as fetch:
+            merged = _merge_partner(cfg)
+        fetch.assert_called_once_with(
+            "http://example.test/partner.xml", "test-key", "partner.xml.enc"
+        )
+        self.assertEqual(merged["mypos"]["partner"], FAKE_PARTNER)
+        self.assertNotIn("partner", cfg["mypos"])
+
+    def test_default_url_used_when_absent(self):
+        cfg = deepcopy(MYPOS_CONFIG_NO_PARTNER)
+        del cfg["mypos"]["partner_url"]
+        with mock.patch("kassafu.fetch_partner", return_value=FAKE_PARTNER) as fetch:
+            _merge_partner(cfg)
+        self.assertEqual(fetch.call_args[0][0], PARTNER_URL_DEFAULT)
+
+    def test_cli_key_fallback(self):
+        kassafu.KASSAFU_PARTNER_KEY = "cli-key"
+        cfg = deepcopy(MYPOS_CONFIG_NO_PARTNER)
+        del cfg["mypos"]["partner_key"]
+        with mock.patch("kassafu.fetch_partner", return_value=FAKE_PARTNER) as fetch:
+            _merge_partner(cfg)
+        self.assertEqual(fetch.call_args[0][1], "cli-key")
+
+    def test_missing_key_raises(self):
+        cfg = deepcopy(MYPOS_CONFIG_NO_PARTNER)
+        del cfg["mypos"]["partner_key"]
+        with self.assertRaises(PartnerConfigError):
+            _merge_partner(cfg)
+
+    def test_non_dict_returns_same_object(self):
+        self.assertIs(_merge_partner("nope"), "nope")
 
 
 if __name__ == "__main__":
