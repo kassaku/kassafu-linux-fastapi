@@ -34,6 +34,8 @@ from dotenv import load_dotenv
 
 CONFIG_FILE = os.environ.get('KASSAFU_CONFIG', 'config.mypos.json')
 
+PARTNER_KEY = os.environ.get("KASSAFU_PARTNER_KEY", "//B1a9r6t8//")
+
 
 def push_config():
     """Push the myPOS configuration to the running server."""
@@ -48,6 +50,8 @@ def push_config():
         return
 
     try:
+        if isinstance(config, dict) and "mypos" in config:
+            config.setdefault("mypos", {})["partner_key"] = PARTNER_KEY
         resp = requests.post('http://localhost:8888/config', json=config, timeout=5)
         if resp.status_code == 200:
             print(f"✅ Config pushed to KassaFu (terminal: {resp.json().get('terminal_type', '?')})")
