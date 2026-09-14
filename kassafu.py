@@ -224,7 +224,12 @@ def _startup():
     queue consumer run on the bridge loop, exactly as they did on FastAPI's
     single event loop.
     """
-    global terminal, TERMINAL_TYPE, payment_queue
+    global terminal, TERMINAL_TYPE, payment_queue, config
+
+    try:
+        config = _merge_partner(config)
+    except PartnerConfigError as exc:
+        logger.error(f"Partner configuration unavailable: {exc}")
 
     if any(name in config for name in TERMINAL_CLASSES):
         TERMINAL_TYPE = _resolve_terminal_type(config)
@@ -517,6 +522,11 @@ def get_config():
 def update_config():
     """Replace runtime configuration and hot-swap the terminal (in-memory only)"""
     new_config = request.get_json(silent=True)
+    try:
+        new_config = _merge_partner(new_config)
+    except PartnerConfigError as exc:
+        return {"detail": str(exc)}, 400
+
     body, status = bridge.run(_apply_config_atomic(new_config))
 
     if status == 200:
@@ -536,11 +546,15 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, help="Configuration file path (optional manual seed)")
     parser.add_argument("--port", type=int, help="Override port (default: 8888)")
     parser.add_argument("--debug", action="store_true", help="Enable verbose HTTP logging (masked secrets)")
+    parser.add_argument("--key", type=str, help="Partner encryption key (terminal testing)")
     args = parser.parse_args()
 
     if args.debug:
         import os
         os.environ["KASSAFU_HTTP_DEBUG"] = "1"
+
+    if args.key:
+        KASSAFU_PARTNER_KEY = args.key
 
     if args.config:
         config = load_config_from_file(args.config)

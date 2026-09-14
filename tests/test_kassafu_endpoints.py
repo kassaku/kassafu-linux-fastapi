@@ -3,8 +3,10 @@ import os
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import kassafu
+from encrypt_partner import PartnerConfigError
 from kassafu import bridge
 
 SUMUP_CONFIG = {
@@ -251,6 +253,45 @@ class ConfigEndpointTests(unittest.TestCase):
         r = self.client.post("/config", json="nope")
         self.assertEqual(r.status_code, 400)
         self.assertIn("JSON object", r.get_json()["detail"])
+
+    def test_post_config_mypos_with_key_merges_partner(self):
+        cfg_mypos = {
+            "app": {"name": "KassaFu", "mode": "mypos"},
+            "mypos": {
+                "gateway_url": "https://demo-api-gateway.mypos.com",
+                "partner_key": "test-key",
+                "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
+                "terminal_id": "80026232",
+            },
+        }
+        with mock.patch("kassafu.fetch_partner", return_value={
+            "client_id": "mps-app-30034196", "client_secret": "s",
+            "application_id": "app", "partner_id": "mps-p-1",
+        }):
+            r = self.client.post("/config", json=cfg_mypos)
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["terminal_type"], "mypos")
+        self.assertIsNotNone(kassafu.terminal)
+
+    def test_post_config_mypos_fetch_error_returns_400(self):
+        cfg_mypos = {
+            "app": {"name": "KassaFu", "mode": "mypos"},
+            "mypos": {
+                "gateway_url": "https://demo-api-gateway.mypos.com",
+                "partner_key": "test-key",
+                "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
+                "terminal_id": "80026232",
+            },
+        }
+        with mock.patch(
+            "kassafu.fetch_partner",
+            side_effect=PartnerConfigError("Failed to fetch partner configuration"),
+        ):
+            r = self.client.post("/config", json=cfg_mypos)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Failed to fetch partner configuration", r.get_json()["detail"])
 
 
 class HealthAndMiscEndpointTests(unittest.TestCase):
