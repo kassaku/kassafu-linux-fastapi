@@ -500,12 +500,9 @@ The request is rejected (HTTP 409) while a payment is in progress.
   },
   "mypos": {
     "gateway_url": "https://api-gateway.mypos.com",
-    "partner": {
-      "client_id": "client_...",
-      "client_secret": "secret_...",
-      "application_id": "mps-app-...",
-      "partner_id": "mps-p-..."
-    },
+    "partner_url": "http://www.kassaku.nl/restaurants/install/partner.xml",
+    "partner_key": "your-secret",
+    "partner_cache": "partner.xml.enc",
     "merchant": {
       "client_id": "cli_...",
       "client_secret": "sec_..."
@@ -514,6 +511,8 @@ The request is rejected (HTTP 409) while a payment is in progress.
   }
 }
 ```
+
+The `partner` section is fetched and decrypted from `partner_url`; **do not** include an inline `partner` block. `partner_key` is read from this config (or passed with `--key`) and never returned by `GET /config`.
 
 ### Request Body — SumUp
 

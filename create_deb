@@ -10,11 +10,11 @@ PKG_ROOT="$BUILD_DIR/$PKG"
 ROOT="$PKG_ROOT/usr/share/kassafu"
 mkdir -p "$ROOT" "$PKG_ROOT/DEBIAN"
 
-cp kassafu.py asyncio_bridge.py mypos_terminal.py mypos_gateway.py sumup_terminal.py "$ROOT/"
+cp kassafu.py asyncio_bridge.py encrypt_partner.py mypos_terminal.py mypos_gateway.py sumup_terminal.py "$ROOT/"
 cp test_reader_status_sumup.py test_reader_status_mypos.py test_real_payment.py "$ROOT/"
 cp requirements.txt install.sh "$ROOT/"
 
-for f in kassafu.py asyncio_bridge.py mypos_terminal.py mypos_gateway.py sumup_terminal.py install.sh; do
+for f in kassafu.py asyncio_bridge.py encrypt_partner.py mypos_terminal.py mypos_gateway.py sumup_terminal.py install.sh; do
     chmod 755 "$ROOT/$f"
 done
 

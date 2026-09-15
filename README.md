@@ -57,12 +57,9 @@ KassaFu starts **unconfigured** and does not decide the terminal type from a def
   "app": {"name": "KassaFu", "mode": "mypos"},
   "mypos": {
     "gateway_url": "https://api-gateway.mypos.com",
-    "partner": {
-      "client_id": "client_...",
-      "client_secret": "secret_...",
-      "application_id": "mps-app-...",
-      "partner_id": "mps-p-..."
-    },
+    "partner_url": "http://www.kassaku.nl/restaurants/install/partner.xml",
+    "partner_key": "",
+    "partner_cache": "partner.xml.enc",
     "merchant": {
       "client_id": "cli_...",
       "client_secret": "sec_..."
@@ -71,6 +68,18 @@ KassaFu starts **unconfigured** and does not decide the terminal type from a def
   }
 }
 ```
+
+### Hosting myPOS partner credentials
+
+The `partner` credentials are no longer stored in `config.mypos.json`. They live in an encrypted blob hosted at the `partner_url` above. To build it from a plaintext JSON file:
+
+```bash
+cp config.partner.json partner.json   # contains {"app":..., "partner": {...}}
+python3 encrypt_partner.py --key "your-secret" --input partner.json --output partner.xml.enc
+# upload partner.xml.enc to the partner_url location
+```
+
+The key is supplied at runtime via `mypos.partner_key` (pushed by the POS) or `--key <key>` (terminal testing) and is never stored in code, config, or git.
 
 ### SumUp
 

@@ -73,11 +73,13 @@ CMD ["python", "kassafu.py"]
 
 What to install for this project:
 
-fastapi==0.104.1
-uvicorn==0.24.0
+flask==3.1.3
+waitress==3.0.2
 requests==2.31.0
 python-dotenv==1.0.0
-httpx==0.25.1
+cryptography==41.0.7
+httpx>=0.28.1
+sumup
 
 # Integration SumUp payment terminal status
 
