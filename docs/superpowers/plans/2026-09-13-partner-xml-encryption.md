@@ -17,7 +17,7 @@
 **Files:**
 - Modify: `requirements.txt`
 
-- [ ] **Step 1: Add the pin to requirements.txt**
+- [x] **Step 1: Add the pin to requirements.txt**
 
 ```text
 cryptography==41.0.7
@@ -25,17 +25,17 @@ cryptography==41.0.7
 
 (Place after the `httpx>=0.28.1` line, matching the existing alphabetized-ish flow.)
 
-- [ ] **Step 2: Install into the venv**
+- [x] **Step 2: Install into the venv**
 
 Run: `venv/bin/pip install cryptography==41.0.7`
 Expected: installed successfully.
 
-- [ ] **Step 3: Verify import**
+- [x] **Step 3: Verify import**
 
 Run: `venv/bin/python -c "import cryptography; print(cryptography.__version__)"`
 Expected: prints `41.0.7`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add requirements.txt
@@ -49,7 +49,7 @@ git commit -m "chore: add cryptography dependency for partner encryption"
 **Files:**
 - Create: `tests/test_encrypt_partner.py`
 
-- [ ] **Step 1: Write the test file**
+- [x] **Step 1: Write the test file**
 
 ```python
 import json
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `venv/bin/python -m unittest tests.test_encrypt_partner -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'encrypt_partner'`.
@@ -183,7 +183,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'encrypt_partner'`.
 **Files:**
 - Create: `encrypt_partner.py`
 
-- [ ] **Step 1: Write the module**
+- [x] **Step 1: Write the module**
 
 ```python
 #!/usr/bin/env python3
@@ -349,12 +349,12 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run the tests to verify they pass**
+- [x] **Step 2: Run the tests to verify they pass**
 
 Run: `venv/bin/python -m unittest tests.test_encrypt_partner -v`
 Expected: all 11 tests PASS.
 
-- [ ] **Step 3: CLI smoke check (in /tmp, no repo files touched)**
+- [x] **Step 3: CLI smoke check (in /tmp, no repo files touched)**
 
 ```bash
 cd /tmp/opencode && printf '%s' '{"app":{"name":"KassaFu","mode":"mypos"},"partner":{"client_id":"c","client_secret":"s","application_id":"a","partner_id":"p"}}' > partner.json
@@ -363,7 +363,7 @@ python3 /home/mensfort/workspace/kassafu/encrypt_partner.py --key "//B1a9r6t8//"
 
 Expected: prints `Encrypted partner.json -> partner.xml.enc`; the produced blob is binary (starts with `KASSAFU_BLOB`), not plaintext.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add encrypt_partner.py tests/test_encrypt_partner.py
@@ -378,7 +378,7 @@ git commit -m "feat: add encrypt_partner tool with versioned AES-GCM blob suppor
 - Modify: `tests/test_kassafu_config.py`
 - Modify: `kassafu.py`
 
-- [ ] **Step 1: Add imports to the test file**
+- [x] **Step 1: Add imports to the test file**
 
 Add to the top of `tests/test_kassafu_config.py`:
 
@@ -391,7 +391,7 @@ from kassafu import _apply_runtime_config, _merge_partner, _resolve_terminal_typ
 
 (Replace the current `from kassafu import _apply_runtime_config, _resolve_terminal_type` line.)
 
-- [ ] **Step 2: Add `_merge_partner` unit tests**
+- [x] **Step 2: Add `_merge_partner` unit tests**
 
 Append before `if __name__ == "__main__":` in `tests/test_kassafu_config.py`:
 
@@ -461,12 +461,12 @@ class MergePartnerTests(unittest.TestCase):
         self.assertIs(_merge_partner("nope"), "nope")
 ```
 
-- [ ] **Step 3: Run to verify the new tests fail**
+- [x] **Step 3: Run to verify the new tests fail**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_config -v`
 Expected: FAIL — `AttributeError: module 'kassafu' has no attribute '_merge_partner'` (new tests). Existing `ApplyRuntimeConfigTests` still pass.
 
-- [ ] **Step 4: Add the import and globals to kassafu.py**
+- [x] **Step 4: Add the import and globals to kassafu.py**
 
 At the top of `kassafu.py`, after the existing `from mypos_terminal import MyPOSTerminal`:
 
@@ -485,7 +485,7 @@ KASSAFU_PARTNER_KEY = None
 PARTNER_CACHE_DEFAULT = "partner.xml.enc"
 ```
 
-- [ ] **Step 5: Add the `_merge_partner` helper**
+- [x] **Step 5: Add the `_merge_partner` helper**
 
 Insert after `_resolve_terminal_type` (before `_apply_runtime_config`):
 
@@ -516,12 +516,12 @@ def _merge_partner(cfg: dict) -> dict:
     return merged
 ```
 
-- [ ] **Step 6: Run the config tests to verify they pass**
+- [x] **Step 6: Run the config tests to verify they pass**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_config -v`
 Expected: all tests (existing + new `_merge_partner` tests) PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add kassafu.py tests/test_kassafu_config.py
@@ -536,7 +536,7 @@ git commit -m "feat: add _merge_partner to fetch and inject partner credentials"
 - Modify: `kassafu.py`
 - Modify: `tests/test_kassafu_endpoints.py`
 
-- [ ] **Step 1: Add the `--key` argparse flag in `__main__`**
+- [x] **Step 1: Add the `--key` argparse flag in `__main__`**
 
 In `kassafu.py`, in the `if __name__ == "__main__":` block, after the `--debug` argument:
 
@@ -551,7 +551,7 @@ After `args = parser.parse_args()`, set the module global:
         KASSAFU_PARTNER_KEY = args.key
 ```
 
-- [ ] **Step 2: Merge in `update_config()`**
+- [x] **Step 2: Merge in `update_config()`**
 
 Replace the body of `update_config()` (the POST /config route) with:
 
@@ -576,7 +576,7 @@ def update_config():
     return body, status
 ```
 
-- [ ] **Step 3: Merge in `_startup()`**
+- [x] **Step 3: Merge in `_startup()`**
 
 In `_startup()`, add `config` to the `global` statement and merge before terminal init:
 
@@ -601,7 +601,7 @@ def _startup():
 
 (The rest of the function is unchanged.)
 
-- [ ] **Step 4: Add endpoint tests for the myPOS config flow**
+- [x] **Step 4: Add endpoint tests for the myPOS config flow**
 
 In `tests/test_kassafu_endpoints.py`:
 - Add import at top: `from unittest import mock`
@@ -650,19 +650,19 @@ In `tests/test_kassafu_endpoints.py`:
 
 (Add `from encrypt_partner import PartnerConfigError` to the imports of that test file too.)
 
-- [ ] **Step 5: Run the full endpoint suite**
+- [x] **Step 5: Run the full endpoint suite**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_endpoints -v`
 Expected: all 24 endpoint tests pass (when run on their own, the two new myPOS tests need `mock` and `PartnerConfigError` imported — verify those imports are present).
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `venv/bin/python -m unittest discover -s tests`
 Expected: all ~91 tests pass (72 existing + 11 encrypt_partner + 6 merge + 2 new endpoint tests).
 
 Note: the `_merge_partner` and `fetch_partner` monkeypatch names must match. `kassafu.fetch_partner` is module-level (imported via `from encrypt_partner import fetch_partner`), so `mock.patch("kassafu.fetch_partner", ...)` patches the name kassafu's `_merge_partner` looks up.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add kassafu.py tests/test_kassafu_endpoints.py
@@ -678,7 +678,7 @@ git commit -m "feat: wire partner encryption into config and startup paths"
 
 Purpose: the user runs this script to push `config.mypos.json` (which no longer contains a `partner` block) to a running server. The script injects the partner key so the server can decrypt the hosted blob. It reads `KASSAFU_PARTNER_KEY` from the environment, defaulting to the example passphrase `//B1a9r6t8//` (replace with your real key).
 
-- [ ] **Step 1: Add the key source**
+- [x] **Step 1: Add the key source**
 
 After the `CONFIG_FILE = ...` line:
 
@@ -686,7 +686,7 @@ After the `CONFIG_FILE = ...` line:
 PARTNER_KEY = os.environ.get("KASSAFU_PARTNER_KEY", "//B1a9r6t8//")
 ```
 
-- [ ] **Step 2: Inject the key into the pushed config**
+- [x] **Step 2: Inject the key into the pushed config**
 
 In `push_config()`, after `config = json.load(f)` inside the try block:
 
@@ -695,12 +695,12 @@ In `push_config()`, after `config = json.load(f)` inside the try block:
         config.setdefault("mypos", {})["partner_key"] = PARTNER_KEY
 ```
 
-- [ ] **Step 3: Verify no syntax break**
+- [x] **Step 3: Verify no syntax break**
 
 Run: `venv/bin/python -m py_compile test_reader_status_mypos.py`
 Expected: no output, exit 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test_reader_status_mypos.py
@@ -715,7 +715,7 @@ git commit -m "feat: pass partner encryption key from test script"
 - Modify: `config.mypos.json` (gitignored — amended locally, not committed)
 - Modify: `.gitignore`
 
-- [ ] **Step 1: Rewrite `config.mypos.json`**
+- [x] **Step 1: Rewrite `config.mypos.json`**
 
 ```json
 {
@@ -736,7 +736,7 @@ git commit -m "feat: pass partner encryption key from test script"
 
 (Keep the existing `merchant` and `terminal_id` values from the current file — copy them verbatim, do not invent them.)
 
-- [ ] **Step 2: Add generated-blob files to `.gitignore`**
+- [x] **Step 2: Add generated-blob files to `.gitignore`**
 
 Append to `.gitignore`:
 
@@ -747,12 +747,12 @@ partner.xml.enc
 partner.xml.enc.*
 ```
 
-- [ ] **Step 3: Verify `.gitignore` took effect**
+- [x] **Step 3: Verify `.gitignore` took effect**
 
 Run: `git status --short`
 Expected: `config.partner.json` (which currently shows `??`) no longer appears (it is now ignored).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .gitignore
@@ -770,7 +770,7 @@ git commit -m "chore: ignore generated partner blob and plaintext files"
 - Modify: `API.md`
 - Modify: `SOFTWARE.md`
 
-- [ ] **Step 1: Copy `encrypt_partner.py` in `install.sh`**
+- [x] **Step 1: Copy `encrypt_partner.py` in `install.sh`**
 
 After the `cp "$SCRIPT_DIR/sumup_terminal.py" "$INSTALL_DIR/"` line, add:
 
@@ -778,7 +778,7 @@ After the `cp "$SCRIPT_DIR/sumup_terminal.py" "$INSTALL_DIR/"` line, add:
 cp "$SCRIPT_DIR/encrypt_partner.py" "$INSTALL_DIR/"
 ```
 
-- [ ] **Step 2: Add `encrypt_partner.py` to `create_deb`**
+- [x] **Step 2: Add `encrypt_partner.py` to `create_deb`**
 
 Update the cp line (line 13) to include `encrypt_partner.py`:
 
@@ -792,7 +792,7 @@ And the chmod loop (line 17) to include it:
 for f in kassafu.py asyncio_bridge.py encrypt_partner.py mypos_terminal.py mypos_gateway.py sumup_terminal.py install.sh; do
 ```
 
-- [ ] **Step 3: Update `README.md` (myPOS config example)**
+- [x] **Step 3: Update `README.md` (myPOS config example)**
 
 Replace the myPOS JSON block (lines ~55-73) with:
 
@@ -813,7 +813,7 @@ Replace the myPOS JSON block (lines ~55-73) with:
 }
 ```
 
-- [ ] **Step 4: Document the encrypt/host/fetch flow in `README.md`**
+- [x] **Step 4: Document the encrypt/host/fetch flow in `README.md`**
 
 Add a short subsection after the myPOS config example:
 
@@ -831,7 +831,7 @@ python3 encrypt_partner.py --key "your-secret" --input partner.json --output par
 The key is supplied at runtime via `mypos.partner_key` (pushed by the POS) or `--key <key>` (terminal testing) and is never stored in code, config, or git.
 ````
 
-- [ ] **Step 5: Update `API.md` (myPOS request-body example)**
+- [x] **Step 5: Update `API.md` (myPOS request-body example)**
 
 Replace the myPOS example JSON in the `POST /config` section (lines 495-516) with:
 
@@ -857,7 +857,7 @@ Replace the myPOS example JSON in the `POST /config` section (lines 495-516) wit
 
 Add a note under it: "The `partner` section is fetched and decrypted from `partner_url`; **do not** include an inline `partner` block. `partner_key` is read from this config (or passed with `--key`) and never returned by `GET /config`."
 
-- [ ] **Step 6: Add `cryptography` to `SOFTWARE.md`**
+- [x] **Step 6: Add `cryptography` to `SOFTWARE.md`**
 
 In the dependencies list, after the `python-dotenv==1.0.0` line, add:
 
@@ -865,12 +865,12 @@ In the dependencies list, after the `python-dotenv==1.0.0` line, add:
 cryptography==41.0.7
 ```
 
-- [ ] **Step 7: Sanity-check the docs changes**
+- [x] **Step 7: Sanity-check the docs changes**
 
 Run: `venv/bin/python -m py_compile` on nothing — instead run `git diff --stat` and eyeball that only the 5 docs/deploy files changed.
 Expected: install.sh, create_deb, README.md, API.md, SOFTWARE.md modified.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add install.sh create_deb README.md API.md SOFTWARE.md
@@ -881,17 +881,17 @@ git commit -m "docs: document encrypted partner hosting and deploy the encrypt t
 
 ### Task 9: Full verification and smoke test
 
-- [ ] **Step 1: Run the entire test suite**
+- [x] **Step 1: Run the entire test suite**
 
 Run: `venv/bin/python -m unittest discover -s tests`
 Expected: all tests PASS (72 baseline + new ones, no failures).
 
-- [ ] **Step 2: Grep for accidentally committed secrets**
+- [x] **Step 2: Grep for accidentally committed secrets**
 
 Run: `git grep -n "client_dc3eea\|secret_9ed708\|B1a9r6t8" -- ':!docs/superpowers/plans/*' ':!docs/superpowers/specs/*'`
 Expected: no matches in code/config (the key `//B1a9r6t8//` may appear in the plan/spec docs only, which is allowed — the runtime passphrase must be rotated for production).
 
-- [ ] **Step 3: Live smoke test (myPOS path, optional — needs upload)**
+- [x] **Step 3: Live smoke test (myPOS path, optional — needs upload)**
 
 If the blob has been uploaded to `partner_url`, start `kassafu.py --server --config config.mypos.json --key "your-secret"` and confirm:
 - `/health` shows `"mode": "mypos"`.
@@ -899,7 +899,7 @@ If the blob has been uploaded to `partner_url`, start `kassafu.py --server --con
 
 If not yet uploaded, the cache fallback path is already covered by unit tests; defer the live test.
 
-- [ ] **Step 4: Final review**
+- [x] **Step 4: Final review**
 
 Compare against the spec (`docs/superpowers/specs/2026-09-13-partner-xml-encryption-design.md`) checklist and confirm each item has a task. Update this plan's status checkboxes.
 
