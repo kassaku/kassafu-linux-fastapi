@@ -28,37 +28,40 @@ SOFTWARE.
 
 import os
 import sys
-import json
 import requests
 from dotenv import load_dotenv
 
-CONFIG_FILE = os.environ.get('KASSAFU_CONFIG', 'config.mypos.json')
-
 PARTNER_KEY = os.environ.get("KASSAFU_PARTNER_KEY", "//B1a9r6t8//")
+CLIENT_KEY = os.environ.get("KASSAFU_CLIENT_KEY", "//B1a9r6t8//")
+PARTNER_URL = os.environ.get(
+    "KASSAFU_PARTNER_URL", "http://www.kassaku.nl/restaurants/install/config.partner"
+)
+CLIENT_URL = os.environ.get("KASSAFU_CLIENT_URL", "")
+DEVICE_ID = os.environ.get("KASSAFU_ID", "")
 
 
 def push_config():
-    """Push the myPOS configuration to the running server."""
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            config = json.load(f)
-    except FileNotFoundError:
-        print(f"⚠️  Config file {CONFIG_FILE} not found, keeping current server config")
-        return
-    except json.JSONDecodeError as e:
-        print(f"⚠️  Invalid JSON in {CONFIG_FILE}: {e}, keeping current server config")
+    """Push the remote-config interface to the running server."""
+    client_url = CLIENT_URL
+    if not client_url:
+        print("❌ KASSAFU_CLIENT_URL is required")
         return
 
+    payload = {
+        "partner_url": PARTNER_URL,
+        "client_url": client_url,
+        "partner_key": PARTNER_KEY,
+        "client_key": CLIENT_KEY,
+        "id": DEVICE_ID,
+    }
     try:
-        if isinstance(config, dict) and "mypos" in config:
-            config.setdefault("mypos", {})["partner_key"] = PARTNER_KEY
-        resp = requests.post('http://localhost:8888/config', json=config, timeout=5)
+        resp = requests.post('http://localhost:8888/config', json=payload, timeout=5)
         if resp.status_code == 200:
             print(f"✅ Config pushed to KassaFu (terminal: {resp.json().get('terminal_type', '?')})")
         else:
-            print(f"⚠️  Config push failed ({resp.status_code}): {resp.text}")
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️  Config push failed: {e}")
+            print(f"❌ Config push failed ({resp.status_code}): {resp.json()}")
+    except requests.RequestException as exc:
+        print(f"❌ Config push failed: {exc}")
 
 
 def test_reader_status():
