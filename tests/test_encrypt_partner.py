@@ -2,16 +2,12 @@ import json
 import os
 import tempfile
 import unittest
-from unittest import mock
-
-import httpx
 
 from encrypt_partner import (
     PARTNER_URL_DEFAULT,
     PartnerConfigError,
     decrypt_blob,
     encrypt_file,
-    fetch_partner,
     parse_partner,
 )
 
@@ -67,6 +63,12 @@ class EncryptDecryptTests(unittest.TestCase):
         with self.assertRaises(PartnerConfigError):
             decrypt_blob(blob, "test-key")
 
+    def test_default_url(self):
+        self.assertEqual(
+            PARTNER_URL_DEFAULT,
+            "http://www.kassaku.nl/restaurants/install/config.partner",
+        )
+
 
 class ParsePartnerTests(unittest.TestCase):
     def test_returns_partner_dict(self):
@@ -87,38 +89,6 @@ class ParsePartnerTests(unittest.TestCase):
     def test_rejects_invalid_utf8(self):
         with self.assertRaises(PartnerConfigError):
             parse_partner(b"\xff\xfe")
-
-
-class FetchPartnerTests(unittest.TestCase):
-    def test_fetches_and_caches(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            blob = _make_blob(tmpdir)
-            cache = os.path.join(tmpdir, "cache.blob")
-            with mock.patch("encrypt_partner.httpx.get", return_value=httpx.Response(200, content=blob)):
-                partner = fetch_partner("http://example/partner.xml", "test-key", cache)
-            self.assertEqual(partner["client_id"], "client_test")
-            self.assertTrue(os.path.exists(cache))
-
-    def test_cache_fallback(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            blob = _make_blob(tmpdir)
-            cache = os.path.join(tmpdir, "cache.blob")
-            with open(cache, "wb") as f:
-                f.write(blob)
-            with mock.patch("encrypt_partner.httpx.get", side_effect=httpx.ConnectError("down")):
-                partner = fetch_partner("http://dead/partner.xml", "test-key", cache)
-            self.assertEqual(partner["client_id"], "client_test")
-
-    def test_no_cache_raises(self):
-        with mock.patch("encrypt_partner.httpx.get", side_effect=httpx.ConnectError("down")):
-            with self.assertRaises(PartnerConfigError):
-                fetch_partner("http://dead/partner.xml", "test-key", "/nonexistent/cache.blob")
-
-    def test_default_url(self):
-        self.assertEqual(
-            PARTNER_URL_DEFAULT,
-            "http://www.kassaku.nl/restaurants/install/partner.xml",
-        )
 
 
 if __name__ == "__main__":

@@ -5,22 +5,18 @@ CLI (hand-encryption tool):
 
     python3 encrypt_partner.py --key "//B1a9r6t8//" --input partner.json --output partner.xml.enc
 
-Also the importable crypto/fetch library kassafu uses at runtime.
+Also the importable crypto library kassafu uses at runtime (decrypt_blob + parse_partner).
 """
 
 import argparse
 import json
-import logging
 import os
 
-import httpx
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-logger = logging.getLogger(__name__)
-
-PARTNER_URL_DEFAULT = "http://www.kassaku.nl/restaurants/install/partner.xml"
+PARTNER_URL_DEFAULT = "http://www.kassaku.nl/restaurants/install/config.partner"
 
 BLOB_MAGIC = b"KASSAFU_BLOB"
 BLOB_VERSION = 1
@@ -117,37 +113,6 @@ def parse_partner(plaintext: bytes) -> dict:
     if not isinstance(partner, dict):
         raise PartnerConfigError("Partner payload missing 'partner' object")
     return partner
-
-
-def fetch_partner(partner_url: str, key: str, cache_path: str) -> dict:
-    """Fetch, decrypt and parse the partner config, caching the blob."""
-    blob = None
-    try:
-        response = httpx.get(partner_url, timeout=10.0, follow_redirects=True)
-        if response.is_error:
-            response.raise_for_status()
-        blob = response.content
-    except httpx.HTTPError as exc:
-        logger.warning(f"Failed to fetch partner config from {partner_url}: {exc}")
-
-    if blob is None:
-        try:
-            with open(cache_path, "rb") as f:
-                blob = f.read()
-            logger.warning("Falling back to cached partner config")
-        except OSError:
-            raise PartnerConfigError(
-                "Failed to fetch partner configuration and no cached copy available"
-            )
-
-    try:
-        with open(cache_path, "wb") as f:
-            f.write(blob)
-    except OSError:
-        logger.warning(f"Could not write partner cache to {cache_path}")
-
-    plaintext = decrypt_blob(blob, key)
-    return parse_partner(plaintext)
 
 
 def main():
