@@ -86,8 +86,14 @@ python3 kassafu.py --server
 Optional arguments:
 
 ```bash
---config /path/to/config.json
---port 8888
+--server            Run in server mode
+--port              Override port (default: 8888)
+--debug             Enable verbose HTTP logging (masked secrets)
+--partner-url       Partner blob URL (myPOS only)
+--client-url        Client blob URL
+--partner-key       Partner blob encryption key (myPOS only)
+--client-key        Client blob encryption key
+--id                Device id (terminal_id / reader_id)
 ```
 
 Default server:
