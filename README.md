@@ -139,6 +139,7 @@ python3 test_real_payment.py
 | `GET /reader/status` | Terminal online/ready status |
 | `GET /config` | Current runtime config |
 | `POST /config` | Update config / swap terminal type |
+| `GET /version` | `{"app": "KassaFu", "version": "1.0.0"}` |
 
 Full documentation: [API.md](API.md)
 

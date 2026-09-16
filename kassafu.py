@@ -43,6 +43,8 @@ from encrypt_partner import (
     decrypt_blob,
 )
 
+__version__ = "1.0.0"
+
 TERMINAL_CLASSES = {
     "sumup": SumUpTerminal,
     "mypos": MyPOSTerminal,
@@ -578,6 +580,12 @@ def get_config():
     cfg = terminal.get_config()
     cfg["app"]["mode"] = TERMINAL_TYPE
     return cfg
+
+
+@app.get("/version")
+def version():
+    """Return the KassaFu version."""
+    return {"app": "KassaFu", "version": __version__}
 
 
 @app.post("/config")

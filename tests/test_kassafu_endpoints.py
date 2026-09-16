@@ -294,6 +294,15 @@ class ConfigEndpointTests(unittest.TestCase):
         self.assertIn("Failed to fetch client configuration", r.get_json()["detail"])
 
 
+    def test_version_endpoint_returns_1_0_0(self):
+        r = self.client.get("/version")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            r.get_json(),
+            {"app": "KassaFu", "version": "1.0.0"},
+        )
+
+
 class HealthAndMiscEndpointTests(unittest.TestCase):
     def setUp(self):
         _reset_state()
