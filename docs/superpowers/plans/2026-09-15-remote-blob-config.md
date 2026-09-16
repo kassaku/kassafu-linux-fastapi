@@ -50,7 +50,7 @@ Terminal init contract is unchanged: `_apply_runtime_config` still takes a fully
 - Modify: `encrypt_partner.py`
 - Modify: `tests/test_encrypt_partner.py`
 
-- [ ] **Step 1: Update the default URL constant**
+- [x] **Step 1: Update the default URL constant**
 
 In `encrypt_partner.py`, change line 23 to:
 
@@ -58,11 +58,11 @@ In `encrypt_partner.py`, change line 23 to:
 PARTNER_URL_DEFAULT = "http://www.kassaku.nl/restaurants/install/config.partner"
 ```
 
-- [ ] **Step 2: Remove `fetch_partner`**
+- [x] **Step 2: Remove `fetch_partner`**
 
 Delete the whole `fetch_partner` function (currently lines 122-150) from `encrypt_partner.py`. Also remove the now-unused `import httpx` — wait, check: after deleting `fetch_partner`, is `httpx` referenced anywhere else in the file? If not, remove the `import httpx` line. Also remove the `logger` warning about cache writing if `logger` is now unused — it is still used by nothing else in this file after deletion, so remove `import logging` and `logger = logging.getLogger(__name__)` too. (Verify with `rg "httpx|logger" encrypt_partner.py`.)
 
-- [ ] **Step 3: Update the module docstring**
+- [x] **Step 3: Update the module docstring**
 
 The docstring at the top says "...and the importable crypto/fetch library kassafu uses at runtime." Change the second paragraph to:
 
@@ -70,7 +70,7 @@ The docstring at the top says "...and the importable crypto/fetch library kassaf
 Also the importable crypto library kassafu uses at runtime (decrypt_blob + parse_partner).
 ```
 
-- [ ] **Step 4: Remove the `FetchPartnerTests` class and fix `test_default_url`**
+- [x] **Step 4: Remove the `FetchPartnerTests` class and fix `test_default_url`**
 
 In `tests/test_encrypt_partner.py`:
 - Delete the entire `FetchPartnerTests` class (lines 92-121).
@@ -86,12 +86,12 @@ In `tests/test_encrypt_partner.py`:
         )
 ```
 
-- [ ] **Step 5: Run the encrypt_partner tests**
+- [x] **Step 5: Run the encrypt_partner tests**
 
 Run: `venv/bin/python -m unittest tests.test_encrypt_partner -v`
-Expected: ALL PASS. Count = 10 tests (5 EncryptDecrypt + 5 ParsePartner + 1 DefaultUrl; the 4 FetchPartnerTests are gone).
+Expected: ALL PASS. Count = 11 tests (5 EncryptDecrypt + 5 ParsePartner + 1 DefaultUrl; the 4 FetchPartnerTests are gone).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add encrypt_partner.py tests/test_encrypt_partner.py
@@ -106,7 +106,7 @@ git commit -m "refactor: remove fetch_partner cache path, update default partner
 - Modify: `tests/test_kassafu_config.py`
 - Modify: `kassafu.py`
 
-- [ ] **Step 1: SRP hook — check current test scaffolding**
+- [x] **Step 1: SRP hook — check current test scaffolding**
 
 `tests/test_kassafu_config.py` currently imports `_merge_partner` (line 7), defines `MYPOS_CONFIG_NO_PARTNER` and `FAKE_PARTNER` (lines 125-140), and a `MergePartnerTests` class (lines 143-187). These all become obsolete. BEFORE writing new tests, replace the import line 7:
 
@@ -116,7 +116,7 @@ from kassafu import _apply_runtime_config, _resolve_remote_config, _resolve_term
 
 Keep `from encrypt_partner import PARTNER_URL_DEFAULT, PartnerConfigError` (line 6). Keep `SUMUP_CONFIG`, `MYPOS_CONFIG` (used by `ResolveTerminalTypeTests` / `ApplyRuntimeConfigTests`).
 
-- [ ] **Step 2: Write the failing tests for `_resolve_remote_config`**
+- [x] **Step 2: Write the failing tests for `_resolve_remote_config`**
 
 Append a new `RemoteResolveTests` class before `if __name__ == "__main__":`, and delete `MergePartnerTests`, `MYPOS_CONFIG_NO_PARTNER`, `FAKE_PARTNER`, and the now-unused `from copy import deepcopy` import:
 
@@ -212,12 +212,12 @@ class RemoteResolveTests(unittest.TestCase):
 
 (The `mock`, `_resolve_remote_config`, `PARTNER_URL_DEFAULT`, `PartnerConfigError` names must already be imported at the top of the test module.)
 
-- [ ] **Step 3: Run to verify the new tests fail**
+- [x] **Step 3: Run to verify the new tests fail**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_config.RemoteResolveTests -v`
 Expected: FAIL/ERROR — `_resolve_remote_config` is not defined yet (and the obsolete MergePartnerTests import will also error — fix Step 1 first so the module imports and only RemoteResolveTests fail).
 
-- [ ] **Step 4: Add `import httpx` and switch the kassafu.py import**
+- [x] **Step 4: Add `import httpx` and switch the kassafu.py import**
 
 In `kassafu.py`:
 - Add `import httpx` in the stdlib/third-party import block (next to `import json`).
@@ -237,7 +237,7 @@ from encrypt_partner import (
 KASSAFU_INTERFACE = {}
 ```
 
-- [ ] **Step 5: Add the three helper functions**
+- [x] **Step 5: Add the three helper functions**
 
 Insert after `_resolve_terminal_type` (before the old `_merge_partner`), and DELETE the entire old `_merge_partner` function (currently lines 117-140):
 
@@ -344,17 +344,17 @@ def _resolve_remote_config(interface: dict) -> dict:
     return client
 ```
 
-- [ ] **Step 6: Run to verify the new tests pass**
+- [x] **Step 6: Run to verify the new tests pass**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_config -v`
 Expected: ALL PASS — `RemoteResolveTests` (11 tests) + `ResolveTerminalTypeTests` (7) + `ApplyRuntimeConfigTests` (6) = 24 config tests pass. `MergePartnerTests` is gone.
 
-- [ ] **Step 7: Run the full suite (red expected elsewhere)**
+- [x] **Step 7: Run the full suite (red expected elsewhere)**
 
 Run: `venv/bin/python -m unittest discover -s tests 2>&1 | tail -20`
 Expected: FAILURES in `tests/test_kassafu_endpoints.py` (they still reference `kassafu.fetch_partner` and post inline configs) and possibly an import error. This is expected — Task 4 fixes the endpoints. Note the failures but do NOT fix endpoint tests in this task.
 
-- [ ] **Step 8: Commit (partial)**
+- [x] **Step 8: Commit (partial)**
 
 ```bash
 git add kassafu.py tests/test_kassafu_config.py
@@ -369,7 +369,7 @@ git commit -m "feat: add remote blob resolution helpers to kassafu"
 - Modify: `tests/test_kassafu_endpoints.py`
 - Modify: `kassafu.py`
 
-- [ ] **Step 1: Update the endpoint test scaffolding**
+- [x] **Step 1: Update the endpoint test scaffolding**
 
 In `tests/test_kassafu_endpoints.py`:
 - The `get_config()` in `FakeTerminal` stays as-is.
@@ -456,12 +456,12 @@ class ConfigEndpointTests(unittest.TestCase):
 
 Note: `mock`, `PartnerConfigError` are already imported at the top of the file; `_reset_state`, `SUMUP_CONFIG`, `FakeTerminal` remain from earlier classes.
 
-- [ ] **Step 2: Run to verify the new endpoint tests fail**
+- [x] **Step 2: Run to verify the new endpoint tests fail**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_endpoints.ConfigEndpointTests -v`
 Expected: mostly FAIL — the routes still call `_merge_partner` and old behavior.
 
-- [ ] **Step 3: Update `POST /config` in kassafu.py**
+- [x] **Step 3: Update `POST /config` in kassafu.py**
 
 Replace `update_config()` (currently lines 521-538) with:
 
@@ -489,7 +489,7 @@ def update_config():
     return body, status
 ```
 
-- [ ] **Step 4: Update `GET /config` in kassafu.py**
+- [x] **Step 4: Update `GET /config` in kassafu.py**
 
 Replace `get_config()` (currently lines 511-518) with:
 
@@ -504,17 +504,17 @@ def get_config():
     return cfg
 ```
 
-- [ ] **Step 5: Run the endpoint tests**
+- [x] **Step 5: Run the endpoint tests**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_endpoints.ConfigEndpointTests -v`
 Expected: ALL PASS (8 tests). Then full file: `venv/bin/python -m unittest tests.test_kassafu_endpoints -v` — all endpoint classes pass.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `venv/bin/python -m unittest discover -s tests`
 Expected: ALL PASS. Count: 94 − 4 (FetchPartner) − 6 (MergePartner) + 11 (RemoteResolve) + 0 net on ConfigEndpointTests (was 6, now 8 = +2) = **97 tests**.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add kassafu.py tests/test_kassafu_endpoints.py
@@ -528,11 +528,11 @@ git commit -m "feat: switch config endpoints to remote blob resolution"
 **Files:**
 - Modify: `kassafu.py`
 
-- [ ] **Step 1: Remove `load_config_from_file`**
+- [x] **Step 1: Remove `load_config_from_file`**
 
 Delete the `load_config_from_file` function (currently lines 50-63) from `kassafu.py`. It is only used by the old `--config` path.
 
-- [ ] **Step 2: Update `_startup()`**
+- [x] **Step 2: Update `_startup()`**
 
 Replace the start of `_startup()` (currently lines 227-245) with:
 
@@ -564,7 +564,7 @@ Replace the start of `_startup()` (currently lines 227-245) with:
 
 (The rest of `_startup` stays; the old `config = _merge_partner(config)` line is removed.)
 
-- [ ] **Step 3: Replace the CLI flags in `__main__`**
+- [x] **Step 3: Replace the CLI flags in `__main__`**
 
 Replace the argparse block (currently lines 544-557) with:
 
@@ -596,7 +596,7 @@ Replace the argparse block (currently lines 544-557) with:
         KASSAFU_INTERFACE["id"] = args.id
 ```
 
-- [ ] **Step 4: Update the usage text**
+- [x] **Step 4: Update the usage text**
 
 The non-server branch prints usage; replace lines 568-570 with:
 
@@ -605,17 +605,17 @@ The non-server branch prints usage; replace lines 568-570 with:
         print("Optional: --partner-url/--partner-key (myPOS only), --port 8888")
 ```
 
-- [ ] **Step 5: CLI sanity check (no server)**
+- [x] **Step 5: CLI sanity check (no server)**
 
 Run: `venv/bin/python kassafu.py` (no args) and `venv/bin/python kassafu.py --help`
 Expected: usage text prints; `--help` shows the 5 new flags and no `--config`/`--key`.
 
-- [ ] **Step 6: Run the full suite**
+- [x] **Step 6: Run the full suite**
 
 Run: `venv/bin/python -m unittest discover -s tests`
 Expected: still 97 tests, ALL PASS (no behavior change, just wiring).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add kassafu.py
@@ -629,11 +629,11 @@ git commit -m "feat: resolve remote config at startup via new cli flags"
 **Files:**
 - Modify: `test_reader_status_mypos.py`
 
-- [ ] **Step 1: Read the current script**
+- [x] **Step 1: Read the current script**
 
 Read `test_reader_status_mypos.py` fully. It currently loads `config.mypos.json` (a local file with a `mypos` section) and POSTs it, plus a `PARTNER_KEY` constant injected into the config before pushing.
 
-- [ ] **Step 2: Replace the push with the 5-field interface**
+- [x] **Step 2: Replace the push with the 5-field interface**
 
 Replace the config-loading + push logic so the script POSTs the new interface body:
 
@@ -675,11 +675,11 @@ def push_config():
 
 (The exact body/flow must match what the CURRENT script does — keep its structure, health-check calls, storage ID handling if any, and terminal status checks unchanged. Only the config-push section and the constants change.)
 
-- [ ] **Step 3: Syntax check**
+- [x] **Step 3: Syntax check**
 
 Run: `venv/bin/python -c "import ast; ast.parse(open('test_reader_status_mypos.py').read())"` — no output = OK.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test_reader_status_mypos.py
@@ -695,7 +695,7 @@ git commit -m "feat: push remote-config interface from reader test script"
 - Modify: `API.md`
 - Modify: `docs/remote-config-flow.dot` (only if it references inline config; otherwise skip)
 
-- [ ] **Step 1: README — replace the config section**
+- [x] **Step 1: README — replace the config section**
 
 Read the myPOS config example section (around lines 55-73) and the "Hosting myPOS partner credentials" subsection in `README.md`. Replace the myPOS JSON block with the 5-field interface example:
 
@@ -733,17 +733,17 @@ Keys are never stored in code, config, or git. They are supplied at runtime
 via `POST /config` (or the matching CLI flags) and never returned by `GET /config`.
 ````
 
-- [ ] **Step 2: API.md — update POST /config and GET /config**
+- [x] **Step 2: API.md — update POST /config and GET /config**
 
 In `API.md`, replace the `POST /config` myPOS example body (currently the inline `{app, mypos: {gateway_url, partner_url, partner_key, ...}}` form) with the 5-field interface body (same JSON as README above). Under it keep/adapt the note: "The `partner` and `mypos`/`sumup` sections are fetched and decrypted from `partner_url` / `client_url`; **do not** send them inline. Keys are read from the request and never returned by `GET /config`."
 
 Also update any `GET /config` example to the new unconfigured message `{"message": "config not available, please check tomorrow"}` and the note that a configured `/config` returns the resolved config minus secrets.
 
-- [ ] **Step 3: SOFTWARE.md**
+- [x] **Step 3: SOFTWARE.md**
 
 `SOFTWARE.md` already lists `cryptography` — no change needed. Verify only (`git diff --stat` off this step).
 
-- [ ] **Step 4: Remove stale local config references (.gitignore / docs)**
+- [x] **Step 4: Remove stale local config references (.gitignore / docs)**
 
 - `.gitignore` currently ignores `config.partner.json`, `partner.xml.enc`, `partner.xml.enc.*`. Add one line under that block if absent:
 
@@ -753,7 +753,7 @@ config.<id>.plain
 
 (Deployment of the actual blob files stays out of git; no other change needed unless `docs/remote-config-flow.dot` mentions `partner.xml.enc` — if so, update the labels to `config.partner` and `config.<id>`.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add README.md API.md .gitignore docs/remote-config-flow.dot
@@ -771,7 +771,7 @@ git commit -m "docs: document remote blob config interface"
 - Modify: `tests/test_kassafu_endpoints.py`
 - Modify: `README.md` (mention the endpoint briefly)
 
-- [ ] **Step 1: Add the version constant**
+- [x] **Step 1: Add the version constant**
 
 In `kassafu.py`, at module level (next to `TERMINAL_CLASSES`), add:
 
@@ -779,7 +779,7 @@ In `kassafu.py`, at module level (next to `TERMINAL_CLASSES`), add:
 __version__ = "1.0.0"
 ```
 
-- [ ] **Step 2: Add the tests**
+- [x] **Step 2: Add the tests**
 
 In `tests/test_kassafu_endpoints.py`, append to `ConfigEndpointTests`:
 
@@ -793,7 +793,7 @@ In `tests/test_kassafu_endpoints.py`, append to `ConfigEndpointTests`:
         )
 ```
 
-- [ ] **Step 3: Add the route**
+- [x] **Step 3: Add the route**
 
 In `kassafu.py`, add (near the other simple GET routes, e.g. right after `get_config`):
 
@@ -804,12 +804,12 @@ def version():
     return {"app": "KassaFu", "version": __version__}
 ```
 
-- [ ] **Step 4: Run config endpoint tests**
+- [x] **Step 4: Run config endpoint tests**
 
 Run: `venv/bin/python -m unittest tests.test_kassafu_endpoints.ConfigEndpointTests -v`
 Expected: ALL PASS (now 9 tests in this class).
 
-- [ ] **Step 5: Document in README**
+- [x] **Step 5: Document in README**
 
 In `README.md`, under the API example section, add one line to the `GET /version` example list:
 
@@ -817,7 +817,7 @@ In `README.md`, under the API example section, add one line to the `GET /version
 GET /version   -> {"app": "KassaFu", "version": "1.0.0"}
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add kassafu.py tests/test_kassafu_endpoints.py README.md
@@ -828,17 +828,17 @@ git commit -m "feat: version 1.0 with /version endpoint"
 
 ### Task 8: Full verification
 
-- [ ] **Step 1: Full suite**
+- [x] **Step 1: Full suite**
 
 Run: `venv/bin/python -m unittest discover -s tests`
 Expected: ALL PASS (97 tests), 0 failures/errors.
 
-- [ ] **Step 2: Secret grep**
+- [x] **Step 2: Secret grep**
 
 Run: `git grep -n "client_dc3eea\|secret_9ed708\|sup_sk_wFlGnnpuTlYCbiekkVN1uNjqbeqUS8H6U\|B1a9r6t8" -- ':!docs/superpowers/plans/*' ':!docs/superpowers/specs/*'`
 Expected: no matches outside plan/spec docs. The example passphrase `//B1a9r6t8//` may appear in `encrypt_partner.py`'s docstring and `test_reader_status_mypos.py` defaults (known, user-owned, will be rotated).
 
-- [ ] **Step 3: Live smoke test (remote blobs, test data)**
+- [x] **Step 3: Live smoke test (remote blobs, test data)**
 
 In `/tmp/opencode/remote_smoke`, create two plaintext files and encrypt them:
 
@@ -873,7 +873,7 @@ kill $BLOB_PID $K_PID 2>/dev/null
 
 Expected: `GET /config` before POST prints the message; the SumUp POST returns `{"success":true,"terminal_type":"sumup"}`; health shows `"mode":"sumup"`. Then repeat the flow for a myPOS client blob (with a `partner` blob and `--partner-url`/`--partner-key`) and expect `terminal_type` mypos.
 
-- [ ] **Step 4: Plan checkbox sweep**
+- [x] **Step 4: Plan checkbox sweep**
 
 Run `rg -n -- "- \[ \]" docs/superpowers/plans/2026-09-15-remote-blob-config.md` and mark every box `[x]` (e.g. `sed -i 's/^- \[ \]/- [x]/g'`), then:
 
@@ -888,4 +888,4 @@ git commit -m "docs: mark remote blob config plan complete"
 
 - **Spec coverage:** 5-field interface (T2/T3/T4), client-first resolution (T2 helpers), section-key detection (T2 `_validate_client_config`), myPOS-only partner fetch (T2), inject `id` (T2), strict validation (T2), no cache (T1 removes `fetch_partner`), GET /config message (T3), CLI flags (T4), docs (T6), verification (T7).
 - **Type/name consistency:** `_fetch_blob_json(url, key, what)`, `_validate_client_config(cfg) -> str`, `_resolve_remote_config(interface) -> dict`, `KASSAFU_INTERFACE`, `PARTNER_URL_DEFAULT`, `PartnerConfigError` — used identically across all tasks.
-- **Count check:** 94 baseline − 4 FetchPartnerTests − 6 MergePartnerTests + 11 RemoteResolveTests + ConfigEndpointTests 6→8 (+2) + version test (+1) = 98. Verify after Task 3.6.
+- **Count check:** 94 baseline − 4 FetchPartnerTests − 6 MergePartnerTests + 11 RemoteResolveTests + ConfigEndpointTests 6→8 (+2) + version test (+1) = 98. Task 1 result: 94−4+0 = 90 base, then +11−6+2+1 = 98 target. Verify after Task 3.6.
