@@ -29,6 +29,8 @@ import sys
 import logging
 from typing import Optional
 
+import httpx
+
 from flask import Flask, request
 from werkzeug.exceptions import HTTPException
 from waitress import serve
@@ -39,7 +41,7 @@ from mypos_terminal import MyPOSTerminal
 from encrypt_partner import (
     PARTNER_URL_DEFAULT,
     PartnerConfigError,
-    fetch_partner,
+    decrypt_blob,
 )
 
 TERMINAL_CLASSES = {
@@ -80,8 +82,7 @@ terminal: Optional[object] = None
 payment_queue = None
 active_payment = False
 
-KASSAFU_PARTNER_KEY = None
-PARTNER_CACHE_DEFAULT = "partner.xml.enc"
+KASSAFU_INTERFACE = {}
 
 
 def _get_terminal_class(terminal_type: str):
@@ -114,30 +115,106 @@ def _resolve_terminal_type(cfg: dict) -> str:
     return "sumup"
 
 
-def _merge_partner(cfg: dict) -> dict:
-    """Fetch + decrypt + inject the myPOS partner credentials into a copy of cfg.
+def _fetch_blob_json(url: str, key: str, what: str) -> dict:
+    """GET a remote blob URL, decrypt it, and parse its JSON.
 
-    Non-myPOS configs pass through unchanged. Raises PartnerConfigError when
-    the partner blob cannot be fetched/decrypted or no key is available.
+    what is 'client' or 'partner' and only shapes the error message.
+    Raises PartnerConfigError with a prefix identifying the blob.
     """
-    if not isinstance(cfg, dict) or _resolve_terminal_type(cfg) != "mypos":
-        return cfg
+    try:
+        response = httpx.get(url, timeout=10.0, follow_redirects=True)
+        if response.is_error:
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise PartnerConfigError(f"Failed to fetch {what} configuration from {url}: {exc}")
 
-    mypos = cfg.get("mypos", {})
-    partner_url = mypos.get("partner_url") or PARTNER_URL_DEFAULT
-    partner_key = mypos.get("partner_key") or KASSAFU_PARTNER_KEY
-    if not partner_key:
+    try:
+        plaintext = decrypt_blob(response.content, key)
+    except PartnerConfigError as exc:
+        raise PartnerConfigError(f"Failed to decrypt {what} configuration: {exc}")
+
+    try:
+        data = json.loads(plaintext.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise PartnerConfigError(f"Failed to parse {what} configuration: {exc}")
+    if not isinstance(data, dict):
+        raise PartnerConfigError(f"{what} configuration is not a JSON object")
+    return data
+
+
+def _validate_client_config(cfg: dict) -> str:
+    """Strict-validate a decrypted client config; return 'sumup' or 'mypos'."""
+    has_sumup = "sumup" in cfg
+    has_mypos = "mypos" in cfg
+    if has_sumup == has_mypos:
         raise PartnerConfigError(
-            "Missing partner encryption key (set mypos.partner_key or pass --key)"
+            "Client configuration must contain exactly one of 'sumup' or 'mypos'"
         )
 
-    cache_path = mypos.get("partner_cache") or PARTNER_CACHE_DEFAULT
-    partner = fetch_partner(partner_url, partner_key, cache_path)
+    if has_sumup:
+        sumup = cfg["sumup"]
+        if not isinstance(sumup, dict):
+            raise PartnerConfigError("Missing sumup section in client configuration")
+        if not sumup.get("api_key"):
+            raise PartnerConfigError("Missing sumup.api_key in client configuration")
+        if not sumup.get("merchant_code"):
+            raise PartnerConfigError("Missing sumup.merchant_code in client configuration")
+        return "sumup"
 
-    merged = dict(cfg)
-    merged["mypos"] = dict(mypos)
-    merged["mypos"]["partner"] = partner
-    return merged
+    mypos = cfg["mypos"]
+    if not isinstance(mypos, dict):
+        raise PartnerConfigError("Missing mypos section in client configuration")
+    if not mypos.get("gateway_url"):
+        raise PartnerConfigError("Missing mypos.gateway_url in client configuration")
+    merchant = mypos.get("merchant")
+    if not isinstance(merchant, dict):
+        raise PartnerConfigError("Missing mypos.merchant in client configuration")
+    if not merchant.get("client_id") or not merchant.get("client_secret"):
+        raise PartnerConfigError(
+            "Missing mypos.merchant.client_id/client_secret in client configuration"
+        )
+    return "mypos"
+
+
+def _resolve_remote_config(interface: dict) -> dict:
+    """Turn the 5 interface fields into a fully-resolved runtime config."""
+    client_url = interface.get("client_url") or ""
+    client_key = interface.get("client_key") or ""
+    device_id = interface.get("id") or ""
+    if not client_url or not client_key or not device_id:
+        raise PartnerConfigError(
+            "Missing client_url, client_key or id in configuration"
+        )
+
+    partner_url = interface.get("partner_url") or PARTNER_URL_DEFAULT
+    partner_key = interface.get("partner_key") or ""
+
+    client = _fetch_blob_json(client_url, client_key, "client")
+    term_type = _validate_client_config(client)
+
+    if term_type == "mypos":
+        if not partner_key:
+            raise PartnerConfigError(
+                "Missing partner_key for myPOS client configuration"
+            )
+        partner_doc = _fetch_blob_json(partner_url, partner_key, "partner")
+        partner_obj = partner_doc.get("partner")
+        if not isinstance(partner_obj, dict):
+            raise PartnerConfigError(
+                "Missing partner.partner object in partner configuration"
+            )
+        for field in ("client_id", "client_secret", "application_id", "partner_id"):
+            if not partner_obj.get(field):
+                raise PartnerConfigError(
+                    f"Missing partner partner.{field} in partner configuration"
+                )
+        client["mypos"]["partner"] = partner_obj
+        client["mypos"]["terminal_id"] = device_id
+    else:
+        client["sumup"]["reader_id"] = device_id
+
+    client.setdefault("app", {})
+    return client
 
 
 def _apply_runtime_config(new_config: dict):
