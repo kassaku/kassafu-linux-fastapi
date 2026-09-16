@@ -41,58 +41,48 @@ The server listens on `http://127.0.0.1:8888`.
 Optional CLI flags (mainly for testing):
 
 ```bash
-python3 kassafu.py --server --config config.mypos.json    # seed myPOS config at start
-python3 kassafu.py --server --config config.sumup.json    # seed SumUp config at start
+python3 kassafu.py --server --client-url "http://www.kassaku.nl/restaurants/install/config.80581413" \
+  --client-key "your-client-secret" --partner-key "your-partner-secret" --id 80581413
 python3 kassafu.py --server --port 8888
 ```
 
 # Configuration
 
-KassaFu starts **unconfigured** and does not decide the terminal type from a default config file. Configuration is pushed at runtime via **`POST /config`** and can be swapped between myPOS and SumUp at any time (hot-swap, in-memory only). The `--config` flag is optional and used for seeding/testing.
+KassaFu starts **unconfigured** and does not decide the terminal type from a default config file. Configuration is pushed at runtime via **`POST /config`** and can be swapped between myPOS and SumUp at any time (hot-swap, in-memory only). The `--client-url`/`--client-key` CLI flags are optional and used for seeding/testing.
 
 ### myPOS
 
 ```json
+POST /config
 {
-  "app": {"name": "KassaFu", "mode": "mypos"},
-  "mypos": {
-    "gateway_url": "https://api-gateway.mypos.com",
-    "partner_url": "http://www.kassaku.nl/restaurants/install/partner.xml",
-    "partner_key": "",
-    "partner_cache": "partner.xml.enc",
-    "merchant": {
-      "client_id": "cli_...",
-      "client_secret": "sec_..."
-    },
-    "terminal_id": "80581413"
-  }
+  "partner_url": "http://www.kassaku.nl/restaurants/install/config.partner",
+  "client_url": "http://www.kassaku.nl/restaurants/install/config.80581413",
+  "partner_key": "your-partner-secret",
+  "client_key": "your-client-secret",
+  "id": "80581413"
 }
 ```
 
 ### Hosting myPOS partner credentials
 
-The `partner` credentials are no longer stored in `config.mypos.json`. They live in an encrypted blob hosted at the `partner_url` above. To build it from a plaintext JSON file:
+The myPOS credentials live in two encrypted files hosted on kassaku.nl:
+
+- `config.partner` — the provider/partner credentials (`partner` object).
+- `config.<id>` — the customer/merchant credentials (the `mypos` or `sumup` object, one file per terminal id).
+
+Build them from plaintext JSON with `encrypt_partner.py`:
 
 ```bash
-cp config.partner.json partner.json   # contains {"app":..., "partner": {...}}
-python3 encrypt_partner.py --key "your-secret" --input partner.json --output partner.xml.enc
-# upload partner.xml.enc to the partner_url location
+python3 encrypt_partner.py --key "your-partner-secret" --input partner.json --output config.partner
+python3 encrypt_partner.py --key "your-client-secret" --input client.json --output config.80581413
+# upload both to the hosted directory
 ```
 
-The key is supplied at runtime via `mypos.partner_key` (pushed by the POS) or `--key <key>` (terminal testing) and is never stored in code, config, or git.
+Keys are never stored in code, config, or git. They are supplied at runtime via `POST /config` (or the matching CLI flags) and never returned by `GET /config`.
 
 ### SumUp
 
-```json
-{
-  "app": {"name": "KassaFu", "mode": "sumup"},
-  "sumup": {
-    "api_key": "sup_sk_...",
-    "merchant_code": "MN2RA8M1",
-    "reader_id": "rdr_..."
-  }
-}
-```
+The interface is identical for SumUp — `client_url` points at a `config.<id>` blob containing a `sumup` section (with `api_key` / `merchant_code`) instead of a `mypos` section.
 
 ### Pushing configuration
 
@@ -100,6 +90,8 @@ The key is supplied at runtime via `mypos.partner_key` (pushed by the POS) or `-
 curl -X POST http://127.0.0.1:8888/config -H "Content-Type: application/json" -d @config.mypos.json
 curl http://127.0.0.1:8888/health        # → "mode": "mypos", "terminal_ready": true
 ```
+
+The pushed JSON must be the 5-field interface above (`partner_url`, `client_url`, `partner_key`, `client_key`, `id`).
 
 Switching terminal type is also possible on a live server, e.g. swap myPOS → SumUp by posting the SumUp config the same way.
 

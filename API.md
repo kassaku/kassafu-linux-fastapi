@@ -433,7 +433,7 @@ Check the configured terminal (SumUp or myPOS) status.
 
 ## GET `/config`
 
-Return the current runtime configuration. The `api_key`/`client_secret` are intentionally excluded from the response.
+Return the current runtime configuration. Secrets (keys, credentials) are intentionally excluded from the response; a configured server returns the resolved config (resolved from the remote blobs) minus secrets.
 
 ### Example
 
@@ -474,9 +474,7 @@ When no configuration has been pushed yet:
 
 ```json
 {
-  "app": {
-    "mode": null
-  }
+  "message": "config not available, please check tomorrow"
 }
 ```
 
@@ -494,39 +492,27 @@ The request is rejected (HTTP 409) while a payment is in progress.
 
 ```json
 {
-  "app": {
-    "name": "KassaFu",
-    "mode": "mypos"
-  },
-  "mypos": {
-    "gateway_url": "https://api-gateway.mypos.com",
-    "partner_url": "http://www.kassaku.nl/restaurants/install/partner.xml",
-    "partner_key": "your-secret",
-    "partner_cache": "partner.xml.enc",
-    "merchant": {
-      "client_id": "cli_...",
-      "client_secret": "sec_..."
-    },
-    "terminal_id": "80581413"
-  }
+  "partner_url": "http://www.kassaku.nl/restaurants/install/config.partner",
+  "client_url": "http://www.kassaku.nl/restaurants/install/config.80581413",
+  "partner_key": "your-partner-secret",
+  "client_key": "your-client-secret",
+  "id": "80581413"
 }
 ```
 
-The `partner` section is fetched and decrypted from `partner_url`; **do not** include an inline `partner` block. `partner_key` is read from this config (or passed with `--key`) and never returned by `GET /config`.
+The `partner` and `mypos`/`sumup` sections are fetched and decrypted from `partner_url` / `client_url`; **do not** send them inline. Keys are read from the request and never returned by `GET /config`.
 
 ### Request Body — SumUp
 
+The interface is identical for SumUp — `client_url` points at a `config.<id>` blob containing a `sumup` section instead of a `mypos` section:
+
 ```json
 {
-  "app": {
-    "name": "KassaFu",
-    "mode": "sumup"
-  },
-  "sumup": {
-    "api_key": "sup_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "merchant_code": "MN2RA8M1",
-    "reader_id": "rdr_6P0860A4S186MV3FHM2Q185AD7"
-  }
+  "partner_url": "http://www.kassaku.nl/restaurants/install/config.partner",
+  "client_url": "http://www.kassaku.nl/restaurants/install/config.12345678",
+  "partner_key": "your-partner-secret",
+  "client_key": "your-client-secret",
+  "id": "12345678"
 }
 ```
 

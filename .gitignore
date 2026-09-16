@@ -229,3 +229,4 @@ __marimo__/
 config.partner.json
 partner.xml.enc
 partner.xml.enc.*
+config.<id>.plain
