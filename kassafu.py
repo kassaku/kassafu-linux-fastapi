@@ -25,7 +25,6 @@ SOFTWARE.
 
 import asyncio
 import json
-import sys
 import logging
 from typing import Optional
 
@@ -48,21 +47,6 @@ TERMINAL_CLASSES = {
     "sumup": SumUpTerminal,
     "mypos": MyPOSTerminal,
 }
-
-def load_config_from_file(config_path: str) -> dict:
-    """Load configuration from JSON file"""
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-        logger.info(f"Loaded configuration from {config_path}")
-        return config
-    except FileNotFoundError:
-        logger.error(f"Config file {config_path} not found")
-        logger.error(f"   Please create {config_path} with your terminal credentials")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in {config_path}: {e}")
-        sys.exit(1)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -303,10 +287,11 @@ def _startup():
     """
     global terminal, TERMINAL_TYPE, payment_queue, config
 
-    try:
-        config = _merge_partner(config)
-    except PartnerConfigError as exc:
-        logger.error(f"Partner configuration unavailable: {exc}")
+    if KASSAFU_INTERFACE.get("client_url"):
+        try:
+            config = _resolve_remote_config(KASSAFU_INTERFACE)
+        except PartnerConfigError as exc:
+            logger.error(f"Remote configuration unavailable: {exc}")
 
     if any(name in config for name in TERMINAL_CLASSES):
         TERMINAL_TYPE = _resolve_terminal_type(config)
@@ -630,21 +615,29 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="KassaFu Payment Bridge")
     parser.add_argument("--server", action="store_true", help="Run in server mode")
-    parser.add_argument("--config", type=str, help="Configuration file path (optional manual seed)")
     parser.add_argument("--port", type=int, help="Override port (default: 8888)")
     parser.add_argument("--debug", action="store_true", help="Enable verbose HTTP logging (masked secrets)")
-    parser.add_argument("--key", type=str, help="Partner encryption key (terminal testing)")
+    parser.add_argument("--partner-url", type=str, help="Partner blob URL (myPOS only)")
+    parser.add_argument("--client-url", type=str, help="Client blob URL")
+    parser.add_argument("--partner-key", type=str, help="Partner blob encryption key (myPOS only)")
+    parser.add_argument("--client-key", type=str, help="Client blob encryption key")
+    parser.add_argument("--id", type=str, help="Device id (terminal_id / reader_id)")
     args = parser.parse_args()
 
     if args.debug:
         import os
         os.environ["KASSAFU_HTTP_DEBUG"] = "1"
 
-    if args.key:
-        KASSAFU_PARTNER_KEY = args.key
-
-    if args.config:
-        config = load_config_from_file(args.config)
+    if args.partner_url:
+        KASSAFU_INTERFACE["partner_url"] = args.partner_url
+    if args.client_url:
+        KASSAFU_INTERFACE["client_url"] = args.client_url
+    if args.partner_key:
+        KASSAFU_INTERFACE["partner_key"] = args.partner_key
+    if args.client_key:
+        KASSAFU_INTERFACE["client_key"] = args.client_key
+    if args.id:
+        KASSAFU_INTERFACE["id"] = args.id
 
     port = args.port if args.port else 8888
 
@@ -652,6 +645,5 @@ if __name__ == "__main__":
         _startup()
         serve(app, host="127.0.0.1", port=port)
     else:
-        print("Usage: python3 kassafu.py --server")
-        print("Optional: --config /path/to/config.json")
-        print("Optional: --port 8888")
+        print("Usage: python3 kassafu.py --server --client-url <url> --client-key <key> --id <id>")
+        print("Optional: --partner-url/--partner-key (myPOS only), --port 8888")
