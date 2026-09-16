@@ -439,7 +439,7 @@ Check the configured terminal (SumUp or myPOS) status.
 
 ## GET `/config`
 
-Return the current runtime configuration. Secrets (keys, credentials) are intentionally excluded from the response; a configured server returns the resolved config (resolved from the remote blobs) minus secrets.
+Return the current runtime configuration. Secrets (keys, credentials) are intentionally excluded from the response; a configured server returns the resolved config minus secrets.
 
 ### Example
 
@@ -490,7 +490,7 @@ When no configuration has been pushed yet:
 
 Update configuration at runtime and **hot-swap the terminal implementation** (SumUp ↔ myPOS). The posted object replaces the runtime configuration entirely; the previous terminal is swapped out and the new one initialized in its place. Changes are **in-memory only** and do not persist across restarts.
 
-If `reader_id` (SumUp) or `terminal_id` (myPOS) is omitted, the server attempts to auto-discover a terminal on the account.
+The `id` field is required — the server always uses it as the `terminal_id` (myPOS) or `reader_id` (SumUp).
 
 The request is rejected (HTTP 409) while a payment is in progress.
 

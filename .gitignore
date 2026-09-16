@@ -227,6 +227,7 @@ __marimo__/
 
 # Partner encryption blob + plaintext (never committed)
 config.partner.json
+config.*.json
+config.*.plain
 partner.xml.enc
 partner.xml.enc.*
-config.<id>.plain

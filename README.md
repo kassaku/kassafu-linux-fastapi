@@ -73,10 +73,12 @@ The myPOS credentials live in two encrypted files hosted on kassaku.nl:
 Build them from plaintext JSON with `encrypt_partner.py`:
 
 ```bash
-python3 encrypt_partner.py --key "your-partner-secret" --input partner.json --output config.partner
-python3 encrypt_partner.py --key "your-client-secret" --input client.json --output config.80581413
+python3 encrypt_partner.py --key "your-partner-secret" --input config.partner.json --output config.partner
+python3 encrypt_partner.py --key "your-client-secret" --input config.80581413.json --output config.80581413
 # upload both to the hosted directory
 ```
+
+> **Note:** Plaintext source files (`config.partner.json`, `config.<id>.json`) are listed in `.gitignore` and will not be committed.
 
 Keys are never stored in code, config, or git. They are supplied at runtime via `POST /config` (or the matching CLI flags) and never returned by `GET /config`.
 
