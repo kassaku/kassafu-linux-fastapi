@@ -9,15 +9,6 @@ import kassafu
 from encrypt_partner import PartnerConfigError
 from kassafu import bridge
 
-SUMUP_CONFIG = {
-    "sumup": {
-        "api_key": "sup_sk_test",
-        "merchant_code": "M1234567",
-        "reader_id": "rdr_test123",
-    }
-}
-
-
 def _reset_state():
     kassafu.config = {}
     kassafu.terminal = None
@@ -230,22 +221,22 @@ class ConfigEndpointTests(unittest.TestCase):
         _reset_state()
         self.client = kassafu.app.test_client()
 
-    def test_get_config_without_terminal(self):
+    INTERFACE = {
+        "client_url": "http://example.test/client.blob",
+        "client_key": "client-key",
+        "id": "80026232",
+    }
+
+    def test_get_config_without_terminal_returns_message(self):
         r = self.client.get("/config")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.get_json()["app"]["mode"], "sumup")
-
-    def test_post_config_applies_sumup_config(self):
-        r = self.client.post("/config", json=SUMUP_CONFIG)
-        self.assertEqual(r.status_code, 200)
-        body = r.get_json()
-        self.assertTrue(body["success"])
-        self.assertEqual(body["terminal_type"], "sumup")
-        self.assertIsNotNone(kassafu.terminal)
+        self.assertEqual(
+            r.get_json(), {"message": "config not available, please check tomorrow"}
+        )
 
     def test_post_config_rejected_during_active_payment(self):
         kassafu.active_payment = True
-        r = self.client.post("/config", json=SUMUP_CONFIG)
+        r = self.client.post("/config", json=self.INTERFACE)
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.get_json()["error_code"], 108012)
 
@@ -254,44 +245,53 @@ class ConfigEndpointTests(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("JSON object", r.get_json()["detail"])
 
-    def test_post_config_mypos_with_key_merges_partner(self):
-        cfg_mypos = {
-            "app": {"name": "KassaFu", "mode": "mypos"},
+    def test_post_config_missing_id_returns_400(self):
+        body = {"client_url": "http://example.test/c.blob", "client_key": "k"}
+        r = self.client.post("/config", json=body)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("client_url, client_key or id", r.get_json()["detail"])
+
+    def test_post_config_sumup_success(self):
+        resolved = {
+            "app": {"name": "KassaFu"},
+            "sumup": {"api_key": "sup_sk_test", "merchant_code": "M1234567",
+                      "reader_id": "80026232"},
+        }
+        with mock.patch("kassafu._resolve_remote_config", return_value=resolved):
+            r = self.client.post("/config", json=self.INTERFACE)
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["terminal_type"], "sumup")
+        self.assertIsNotNone(kassafu.terminal)
+
+    def test_post_config_mypos_success(self):
+        resolved = {
+            "app": {"name": "KassaFu"},
             "mypos": {
                 "gateway_url": "https://demo-api-gateway.mypos.com",
-                "partner_key": "test-key",
                 "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
                 "terminal_id": "80026232",
+                "partner": {"client_id": "ci", "client_secret": "cs",
+                            "application_id": "mps-app-test", "partner_id": "mps-p-test"},
             },
         }
-        with mock.patch("kassafu.fetch_partner", return_value={
-            "client_id": "mps-app-30034196", "client_secret": "s",
-            "application_id": "app", "partner_id": "mps-p-1",
-        }):
-            r = self.client.post("/config", json=cfg_mypos)
+        with mock.patch("kassafu._resolve_remote_config", return_value=resolved):
+            r = self.client.post("/config", json=self.INTERFACE)
         self.assertEqual(r.status_code, 200)
         body = r.get_json()
         self.assertTrue(body["success"])
         self.assertEqual(body["terminal_type"], "mypos")
         self.assertIsNotNone(kassafu.terminal)
 
-    def test_post_config_mypos_fetch_error_returns_400(self):
-        cfg_mypos = {
-            "app": {"name": "KassaFu", "mode": "mypos"},
-            "mypos": {
-                "gateway_url": "https://demo-api-gateway.mypos.com",
-                "partner_key": "test-key",
-                "merchant": {"client_id": "cli_merchant", "client_secret": "sec_merchant"},
-                "terminal_id": "80026232",
-            },
-        }
+    def test_post_config_resolution_error_returns_400(self):
         with mock.patch(
-            "kassafu.fetch_partner",
-            side_effect=PartnerConfigError("Failed to fetch partner configuration"),
+            "kassafu._resolve_remote_config",
+            side_effect=PartnerConfigError("Failed to fetch client configuration"),
         ):
-            r = self.client.post("/config", json=cfg_mypos)
+            r = self.client.post("/config", json=self.INTERFACE)
         self.assertEqual(r.status_code, 400)
-        self.assertIn("Failed to fetch partner configuration", r.get_json()["detail"])
+        self.assertIn("Failed to fetch client configuration", r.get_json()["detail"])
 
 
 class HealthAndMiscEndpointTests(unittest.TestCase):

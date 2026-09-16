@@ -587,9 +587,9 @@ def get_reader_status():
 
 @app.get("/config")
 def get_config():
-    """Return the current runtime configuration (API key excluded)"""
+    """Return the resolved runtime config (secrets excluded)."""
     if not terminal:
-        return {"app": {"mode": TERMINAL_TYPE}}
+        return {"message": "config not available, please check tomorrow"}
     cfg = terminal.get_config()
     cfg["app"]["mode"] = TERMINAL_TYPE
     return cfg
@@ -599,12 +599,22 @@ def get_config():
 def update_config():
     """Replace runtime configuration and hot-swap the terminal (in-memory only)"""
     new_config = request.get_json(silent=True)
+    if not isinstance(new_config, dict):
+        return {"detail": "Configuration must be a JSON object"}, 400
+
+    if active_payment:
+        return {
+            "success": False,
+            "message": "Payment in progress, configuration rejected",
+            "error_code": 108012,
+        }, 409
+
     try:
-        new_config = _merge_partner(new_config)
+        resolved = _resolve_remote_config(new_config)
     except PartnerConfigError as exc:
         return {"detail": str(exc)}, 400
 
-    body, status = bridge.run(_apply_config_atomic(new_config))
+    body, status = bridge.run(_apply_config_atomic(resolved))
 
     if status == 200:
         try:
