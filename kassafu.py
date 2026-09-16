@@ -167,10 +167,10 @@ def _resolve_remote_config(interface: dict) -> dict:
     client_url = interface.get("client_url") or ""
     client_key = interface.get("client_key") or ""
     device_id = interface.get("id") or ""
-    if not client_url or not client_key or not device_id:
-        raise PartnerConfigError(
-            "Missing client_url, client_key or id in configuration"
-        )
+    missing = [field for field in ("client_url", "client_key", "id")
+               if not interface.get(field)]
+    if missing:
+        raise PartnerConfigError(f"Missing {', '.join(missing)} in configuration")
 
     partner_url = interface.get("partner_url") or PARTNER_URL_DEFAULT
     partner_key = interface.get("partner_key") or ""
@@ -234,8 +234,10 @@ def _apply_runtime_config(new_config: dict):
 async def _apply_config_atomic(new_config: dict):
     """Check for an active payment and hot-swap the terminal in one loop turn.
 
-    Kept on the bridge loop with no await between the guard and the swap so a
-    concurrent payment cannot interleave the two, matching FastAPI's atomicity.
+    The active_payment check here is the authoritative guard against
+    interrupting a payment mid-swap. The check in update_config is only an
+    early-return optimization before network I/O; together they guarantee a
+    payment cannot be interrupted mid-swap.
     """
     if active_payment:
         return {
@@ -294,6 +296,10 @@ def _startup():
             config = _resolve_remote_config(KASSAFU_INTERFACE)
         except PartnerConfigError as exc:
             logger.error(f"Remote configuration unavailable: {exc}")
+            logger.warning(
+                "Config flags were provided but resolution failed; the server will "
+                "start unconfigured. Use POST /config to retry later."
+            )
 
     if any(name in config for name in TERMINAL_CLASSES):
         TERMINAL_TYPE = _resolve_terminal_type(config)

@@ -138,7 +138,8 @@ class RemoteResolveTests(unittest.TestCase):
         self.assertEqual(resolved["sumup"]["reader_id"], "rdr_123")
         self.assertNotIn("partner", resolved)
 
-    def test_sumup_does_not_fetch_partner(self):
+    def test_sumup_single_blob_call(self):
+        """SumUp client blob is fetched once; no partner blob call is made."""
         interface = {"client_url": "http://c/s.blob", "client_key": "k", "id": "r"}
         with mock.patch("kassafu._fetch_blob_json", return_value=CLIENT_SUMUP) as fetch:
             _resolve_remote_config(interface)

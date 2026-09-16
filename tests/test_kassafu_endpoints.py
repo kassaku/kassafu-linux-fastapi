@@ -249,7 +249,9 @@ class ConfigEndpointTests(unittest.TestCase):
         body = {"client_url": "http://example.test/c.blob", "client_key": "k"}
         r = self.client.post("/config", json=body)
         self.assertEqual(r.status_code, 400)
-        self.assertIn("client_url, client_key or id", r.get_json()["detail"])
+        detail = r.get_json()["detail"]
+        self.assertIn("Missing", detail)
+        self.assertIn("id", detail)
 
     def test_post_config_sumup_success(self):
         resolved = {
@@ -292,7 +294,6 @@ class ConfigEndpointTests(unittest.TestCase):
             r = self.client.post("/config", json=self.INTERFACE)
         self.assertEqual(r.status_code, 400)
         self.assertIn("Failed to fetch client configuration", r.get_json()["detail"])
-
 
     def test_version_endpoint_returns_1_0_0(self):
         r = self.client.get("/version")
