@@ -78,6 +78,16 @@ python3 encrypt_partner.py --key "your-client-secret" --input config.80581413.js
 # upload both to the hosted directory
 ```
 
+Alternatively, create the files interactively — the `create_*.py` scripts ask for
+the credentials, an encryption key, and the output filename, write the plaintext
+`<name>.json`, and encrypt it to `<name>` in one go:
+
+```bash
+python3 create_partner.py     # myPOS provider credentials -> config.partner
+python3 create_mypos.py       # myPOS merchant credentials -> config.<terminal_id>
+python3 create_sumup.py       # SumUp merchant credentials -> config.<reader_id>
+```
+
 > **Note:** Plaintext source files (`config.partner.json`, `config.<id>.json`) are listed in `.gitignore` and will not be committed.
 
 Keys are never stored in code, config, or git. They are supplied at runtime via `POST /config` (or the matching CLI flags) and never returned by `GET /config`.

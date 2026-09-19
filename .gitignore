@@ -229,5 +229,7 @@ __marimo__/
 config.partner.json
 config.*.json
 config.*.plain
+config.partner
+config.*.enc
 partner.xml.enc
 partner.xml.enc.*
