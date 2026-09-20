@@ -296,5 +296,89 @@ class HttpDebugLoggingTests(unittest.TestCase):
         self.assertNotIn("-->", log)
 
 
+class AuthFailureTrackingTests(unittest.TestCase):
+    def test_partner_400_sets_auth_failure(self):
+        async def scenario():
+            def handler(request):
+                return httpx.Response(400, text="invalid client")
+
+            gateway = make_gateway(handler)
+            with self.assertRaises(MyPOSGatewayError):
+                await gateway._get_partner_token()
+            return gateway.auth_failure
+
+        self.assertEqual(asyncio.run(scenario()), "partner")
+
+    def test_partner_success_clears_auth_failure(self):
+        async def scenario():
+            state = {"fail": True}
+
+            def handler(request):
+                if state["fail"]:
+                    state["fail"] = False
+                    return httpx.Response(400, text="invalid client")
+                return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
+
+            gateway = make_gateway(handler)
+            with self.assertRaises(MyPOSGatewayError):
+                await gateway._get_partner_token()
+            self.assertEqual(gateway.auth_failure, "partner")
+            token = await gateway._get_partner_token()
+            return token, gateway.auth_failure
+
+        token, failure = asyncio.run(scenario())
+        self.assertEqual(token, "tok_partner")
+        self.assertIsNone(failure)
+
+    def test_merchant_400_sets_auth_failure(self):
+        async def scenario():
+            def handler(request):
+                if request.url.path == "/api/v1/oauth/token":
+                    return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
+                return httpx.Response(400, text="invalid merchant")
+
+            gateway = make_gateway(handler)
+            with self.assertRaises(MyPOSGatewayError):
+                await gateway._get_session()
+            return gateway.auth_failure
+
+        self.assertEqual(asyncio.run(scenario()), "merchant")
+
+    def test_merchant_success_clears_auth_failure(self):
+        async def scenario():
+            state = {"fail": True}
+
+            def handler(request):
+                if request.url.path == "/api/v1/oauth/token":
+                    return httpx.Response(200, json={"access_token": "tok_partner", "expires_in": 3600})
+                if state["fail"]:
+                    state["fail"] = False
+                    return httpx.Response(400, text="invalid merchant")
+                return httpx.Response(200, json={"session": "session_abc", "expires_in": 360})
+
+            gateway = make_gateway(handler)
+            with self.assertRaises(MyPOSGatewayError):
+                await gateway._get_session()
+            self.assertEqual(gateway.auth_failure, "merchant")
+            session = await gateway._get_session()
+            return session, gateway.auth_failure
+
+        session, failure = asyncio.run(scenario())
+        self.assertEqual(session, "session_abc")
+        self.assertIsNone(failure)
+
+    def test_partner_500_does_not_set_auth_failure(self):
+        async def scenario():
+            def handler(request):
+                return httpx.Response(500, text="boom")
+
+            gateway = make_gateway(handler)
+            with self.assertRaises(MyPOSGatewayError):
+                await gateway._get_partner_token()
+            return gateway.auth_failure
+
+        self.assertIsNone(asyncio.run(scenario()))
+
+
 if __name__ == "__main__":
     unittest.main()

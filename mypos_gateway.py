@@ -76,6 +76,7 @@ class MyPOSGateway:
         self._session_expires = None
         self._token_lock = asyncio.Lock()
         self._session_lock = asyncio.Lock()
+        self._auth_failure = None  # "partner" / "merchant" when credentials are rejected
 
     def _new_client(self) -> httpx.AsyncClient:
         hooks = None
@@ -84,6 +85,11 @@ class MyPOSGateway:
         if self._transport is not None:
             return httpx.AsyncClient(transport=self._transport, event_hooks=hooks)
         return httpx.AsyncClient(event_hooks=hooks)
+
+    @property
+    def auth_failure(self) -> Optional[str]:
+        """'partner' / 'merchant' when that credential set was rejected, else None."""
+        return self._auth_failure
 
     async def _log_request(self, request: httpx.Request):
         body = request.read().decode(errors="replace") if request.content else ""
@@ -132,7 +138,10 @@ class MyPOSGateway:
                 raise MyPOSGatewayError(response.status_code, 'Token response missing "access_token"')
             expires_in = data.get("expires_in", 3600)
             self._partner_token_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 60))
+            self._auth_failure = None
             return access_token
+        if response.status_code in (400, 401, 403):
+            self._auth_failure = "partner"
         raise MyPOSGatewayError(response.status_code, f"Token request failed: HTTP {response.status_code}: {response.text[:200]}")
 
     async def _get_session(self) -> str:
@@ -173,6 +182,7 @@ class MyPOSGateway:
                 raise MyPOSGatewayError(response.status_code, 'Session response missing "session"')
             expires_in = data.get("expires_in", 360)
             self._session_expires = datetime.now(timezone.utc) + timedelta(seconds=max(0, expires_in - 30))
+            self._auth_failure = None
             return session
         detail = f"Session request failed: HTTP {response.status_code}: {response.text[:200]}"
         if response.status_code == 400:
@@ -181,6 +191,8 @@ class MyPOSGateway:
                 " 'mypos.merchant.client_secret' (sec_*) are valid partner"
                 " merchant credentials from the Partners Portal."
             )
+        if response.status_code in (400, 401, 403):
+            self._auth_failure = "merchant"
         raise MyPOSGatewayError(response.status_code, detail)
 
     def _invalidate_tokens(self):
