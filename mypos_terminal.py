@@ -161,6 +161,14 @@ class MyPOSTerminal:
             return 108011
         return 108001
 
+    def _auth_error_code(self) -> Optional[int]:
+        failure = getattr(self.gateway, "auth_failure", None)
+        if failure == "partner":
+            return 108014
+        if failure == "merchant":
+            return 108015
+        return None
+
     async def get_transaction_status(self, transaction_id: str) -> str:
         try:
             data = await self.gateway.get_payment(transaction_id)
@@ -215,7 +223,8 @@ class MyPOSTerminal:
                 "device_currency": data.get("device_currency"),
             }
         except MyPOSGatewayError as e:
-            return {"online": False, "ready": False, "error": e.detail, "error_code": self._map_error_code(e.status)}
+            return {"online": False, "ready": False, "error": e.detail,
+                    "error_code": self._auth_error_code() or self._map_error_code(e.status)}
 
     async def process_payment(self, order_id: str, amount_cents: int, currency: str = "EUR") -> Dict:
         start_time = datetime.now()
@@ -263,7 +272,7 @@ class MyPOSTerminal:
                 "success": False,
                 "status": "failed",
                 "message": e.detail,
-                "error_code": self._map_error_code(e.status),
+                "error_code": self._auth_error_code() or self._map_error_code(e.status),
             }
 
     def _log_transaction(self, order_id: str, amount_cents: int, currency: str, transaction_id: str, start_time: datetime):

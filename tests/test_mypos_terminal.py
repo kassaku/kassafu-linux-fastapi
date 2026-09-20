@@ -284,5 +284,56 @@ class ReadyTests(unittest.TestCase):
         self.assertFalse(t.is_ready)
 
 
+class AuthErrorCodeTests(unittest.TestCase):
+    def test_check_status_partner_credential_error(self):
+        t = make_terminal()
+        t.gateway.get_terminal = lambda terminal_id: (_ for _ in ()).throw(
+            MyPOSGatewayError(400, "Token request failed: HTTP 400"))
+        t.gateway.auth_failure = "partner"
+
+        async def scenario():
+            return await t.check_status()
+
+        status = asyncio.run(scenario())
+        self.assertEqual(status["error_code"], 108014)
+        self.assertFalse(status["online"])
+
+    def test_check_status_merchant_credential_error(self):
+        t = make_terminal()
+        t.gateway.get_terminal = lambda terminal_id: (_ for _ in ()).throw(
+            MyPOSGatewayError(400, "Session request failed: HTTP 400"))
+        t.gateway.auth_failure = "merchant"
+
+        async def scenario():
+            return await t.check_status()
+
+        status = asyncio.run(scenario())
+        self.assertEqual(status["error_code"], 108015)
+        self.assertFalse(status["online"])
+
+    def test_check_status_plain_error_keeps_generic_mapping(self):
+        t = make_terminal()
+        t.gateway.get_terminal = lambda terminal_id: (_ for _ in ()).throw(
+            MyPOSGatewayError(404, "not found"))
+        t.gateway.auth_failure = None
+
+        async def scenario():
+            return await t.check_status()
+
+        self.assertEqual(asyncio.run(scenario())["error_code"], 108002)
+
+    def test_process_payment_credential_error(self):
+        t = make_terminal()
+        t.gateway.create_payment_error = MyPOSGatewayError(400, "Token request failed: HTTP 400")
+        t.gateway.auth_failure = "partner"
+
+        async def scenario():
+            return await t.process_payment("ORD-1", 100, "EUR")
+
+        result = asyncio.run(scenario())
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_code"], 108014)
+
+
 if __name__ == "__main__":
     unittest.main()
