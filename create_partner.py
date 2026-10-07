@@ -19,8 +19,8 @@ def _build(answers):
 def main():
     build_and_encrypt(
         questions=[
-            ("provider client_id", False, None),
-            ("provider client_secret", True, None),
+            ("client_id", False, None),
+            ("client_secret", True, None),
             ("application_id", False, None),
             ("partner_id", False, None),
         ],

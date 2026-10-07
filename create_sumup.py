@@ -21,7 +21,7 @@ def main():
             ("merchant_code", False, None),
         ],
         build_json=_build,
-        default_out="config.rdr_6P0860A4S186MV3FHM2Q185AD7",
+        default_out="config.rdr_",
         help_out="Create and encrypt a SumUp merchant credentials blob.",
     )
 

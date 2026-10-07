@@ -10,10 +10,10 @@ from encrypt_partner import encrypt_file
 def _ask(prompt, secret=False, default=None):
     """Prompt once; reprompt on empty input unless a default is available."""
     while True:
-        if secret:
-            value = getpass.getpass(prompt)
-        else:
-            value = input(prompt)
+        #if secret:
+        #    value = getpass.getpass(prompt)
+        #else:
+        value = input(prompt)
         value = value.strip()
         if value:
             return value

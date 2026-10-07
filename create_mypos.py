@@ -21,8 +21,8 @@ def main():
     build_and_encrypt(
         questions=[
             ("gateway_url", False, "https://api-gateway.mypos.com"),
-            ("merchant client_id", False, None),
-            ("merchant client_secret", True, None),
+            ("client_id", False, None),
+            ("client_secret", True, None),
         ],
         build_json=_build,
         default_out="config.80581413",

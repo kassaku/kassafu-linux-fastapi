@@ -11,7 +11,7 @@ set -e
 REAL_USER="${SUDO_USER:-$USER}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INSTALL_DIR="/usr/share/kassafu"
+INSTALL_DIR="${KASSAFU_INSTALL_DIR:-/usr/share/kassafu}"
 
 echo "Installing KassaFu to $INSTALL_DIR ..."
 
@@ -19,30 +19,34 @@ echo "Installing KassaFu to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR/.restaurant"
 mkdir -p "$INSTALL_DIR/venv"
 
-# --- Copy project files ---
-cp "$SCRIPT_DIR/kassafu.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/asyncio_bridge.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/mypos_terminal.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/mypos_gateway.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/sumup_terminal.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/encrypt_partner.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/test_reader_status_sumup.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/test_reader_status_mypos.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/test_real_payment.py" "$INSTALL_DIR/"
+# --- Copy project files (skip when already installed in place, e.g. via .deb) ---
+if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
+    cp "$SCRIPT_DIR/kassafu.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/asyncio_bridge.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/mypos_terminal.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/mypos_gateway.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/sumup_terminal.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/encrypt_partner.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/test_reader_status_sumup.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/test_reader_status_mypos.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/test_real_payment.py" "$INSTALL_DIR/"
 
-if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
-    cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
-fi
+    if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+        cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
+    fi
 
-# --- Config ---
-if [ -f "$SCRIPT_DIR/config.json" ]; then
-    cp "$SCRIPT_DIR/config.json" "$INSTALL_DIR/.restaurant/"
-    ln -sf .restaurant/config.json "$INSTALL_DIR/config.json"
-    echo "  Config -> $INSTALL_DIR/.restaurant/config.json"
-fi
+    # --- Config ---
+    if [ -f "$SCRIPT_DIR/config.json" ]; then
+        cp "$SCRIPT_DIR/config.json" "$INSTALL_DIR/.restaurant/"
+        ln -sf .restaurant/config.json "$INSTALL_DIR/config.json"
+        echo "  Config -> $INSTALL_DIR/.restaurant/config.json"
+    fi
 
-if [ -f "$SCRIPT_DIR/.env.example" ]; then
-    cp "$SCRIPT_DIR/.env.example" "$INSTALL_DIR/"
+    if [ -f "$SCRIPT_DIR/.env.example" ]; then
+        cp "$SCRIPT_DIR/.env.example" "$INSTALL_DIR/"
+    fi
+else
+    echo "  Already installed at $INSTALL_DIR; skipping file copy"
 fi
 
 # --- Virtual environment ---
